@@ -1,0 +1,17 @@
+# ASSUMED dashboard defaults from EXPERIMENT_SPEC.md section 14.
+# These are not empirical findings. Measured latency, tokens and
+# GPU-seconds are stored separately on each run record.
+
+cost_type: ASSUMED
+
+assumed:
+  observable: 1.00
+  cot: 1.20
+  probe: 0.25
+  nla: 4.00
+  hybrid: 4.50
+  human_review: 25.00
+
+optimizer:
+  strategy: risk_weighted_adaptive
+  compare_against: uniform

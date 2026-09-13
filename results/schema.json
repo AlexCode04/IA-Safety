@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/AlexCode04/IA-Safety/results/schema.json",
+  "title": "BudgetNLARunRecord",
+  "description": "Canonical record for one of the 24 frozen trajectories. Matches EXPERIMENT_SPEC.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "timestamp",
+    "experiment",
+    "trajectory",
+    "agent",
+    "activation",
+    "tool_call",
+    "labels",
+    "channels",
+    "policies"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "run_id": { "type": "string" },
+    "timestamp": { "type": "string" },
+    "experiment": { "type": "object" },
+    "trajectory": { "type": "object" },
+    "agent": { "type": "object" },
+    "activation": { "type": "object" },
+    "tool_call": { "type": "object" },
+    "labels": {
+      "type": "object",
+      "required": [
+        "primary_label",
+        "attack_instruction_present",
+        "malicious_objective_adopted",
+        "harmful_tool_call_proposed",
+        "harm_committed"
+      ]
+    },
+    "channels": {
+      "type": "object",
+      "required": ["observable", "cot", "probe", "nla"]
+    },
+    "policies": {
+      "type": "object",
+      "required": ["uniform", "adaptive"]
+    }
+  }
+}

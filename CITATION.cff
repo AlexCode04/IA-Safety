@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: If you use this software, please cite it using these metadata.
+title: "BUDGET-NLA: Risk-Weighted Adaptive Monitoring for Pre-Harm Sabotage Containment"
+type: software
+license: MIT
+repository-code: https://github.com/AlexCode04/IA-Safety
+authors:
+  - name: IA-Safety Hackathon Team
+    alias: Jhoan, Juan Plata, Maryori, Angel Alexis
+keywords:
+  - ai-safety
+  - pre-harm-containment
+  - chain-of-thought
+  - natural-language-autoencoder
+  - linear-probe
+  - budgeted-monitoring
+version: 0.1.0
+date-released: "2026-09-13"
