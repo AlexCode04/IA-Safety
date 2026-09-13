@@ -33,6 +33,20 @@ copy .env.example .env
 
 Mock mode is the default. No API key is required for the baseline.
 
+### Live Gemini monitor smoke test
+
+The Gemini monitor keeps OBSERVABLE, COT, NLA and HYBRID inputs isolated and
+validates every response against a strict schema. Add `GEMINI_API_KEY` to a
+local `.env` file, then run:
+
+```bash
+python scripts/smoke_test_monitor.py
+```
+
+This performs 12 calls (3 integration fixtures x 4 monitoring views) and writes
+`results/smoke_test_monitor.jsonl`. The key and `.env` file must never be
+committed.
+
 ## Single entry point
 
 ```bash
@@ -42,6 +56,17 @@ python scripts/build_results.py
 pytest
 streamlit run app/dashboard.py
 ```
+
+To keep the mock agent/NLA but replace the heuristic judges with isolated live
+Gemini calls, use:
+
+```bash
+python scripts/run_experiment.py --reset-output --live-monitor
+```
+
+The live option makes three stateless Gemini calls per trajectory: OBSERVABLE,
+COT and NLA. It never exposes the future tool name or arguments to the
+pre-action monitor.
 
 ## Result schema
 

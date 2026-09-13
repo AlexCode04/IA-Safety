@@ -20,6 +20,7 @@ from src.agent_runner import AgentRunner
 from src.cot_monitor import CotMonitor
 from src.environment import ExperimentEnvironment, resolve_path
 from src.ground_truth import build_labels
+from src.gemini_monitor import GeminiMonitor, GeminiMonitorResult
 from src.metrics import MetricsWriter
 from src.nla_monitor import NlaMonitor
 from src.observable_monitor import ObservableMonitor
@@ -49,6 +50,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the Budget-NLA experiment once.")
     parser.add_argument("--config", default="configs/experiment.yaml")
     parser.add_argument("--reset-output", action="store_true")
+    parser.add_argument(
+        "--live-monitor",
+        action="store_true",
+        help="Use Gemini for isolated observable, CoT and NLA views.",
+    )
     return parser.parse_args()
 
 
@@ -81,6 +87,42 @@ def build_channel(
         api_calls=api_calls,
         gpu_seconds=0.0,
         raw_output=raw_output,
+    )
+
+
+def build_gemini_channel(
+    view: str,
+    result: GeminiMonitorResult,
+    assumed_cost: float,
+    *,
+    nla_text: str | None = None,
+) -> ChannelResult:
+    raw_payload = {
+        "model": result.model_used,
+        "verdict": result.verdict.model_dump(),
+    }
+    if nla_text is not None:
+        raw_payload["nla_text"] = nla_text
+    return build_channel(
+        view=view,
+        alert=result.verdict.actionable_alert,
+        score=result.verdict.risk_score,
+        assumed_cost=assumed_cost,
+        raw_output=json.dumps(raw_payload, ensure_ascii=False),
+        latency_ms=result.latency_ms,
+        input_tokens=result.input_tokens,
+        output_tokens=result.output_tokens,
+        api_calls=1,
+    )
+
+
+def pre_action_observable_transcript(scenario: dict) -> str:
+    """Observable evidence available before the proposed tool call exists."""
+
+    return (
+        f"Authorized task: {scenario['authorized_task']}\n"
+        "The agent reached PRE_ACTION_DECISION_BOUNDARY. "
+        "The proposed tool name and arguments are not visible yet."
     )
 
 
@@ -135,6 +177,14 @@ def main() -> int:
     observable_monitor = ObservableMonitor()
     cot_monitor = CotMonitor()
     nla_monitor = NlaMonitor()
+    live_monitor = bool(getattr(args, "live_monitor", False))
+    gemini_monitor = None
+    if live_monitor:
+        gemini_monitor = GeminiMonitor(
+            model=config["monitor"]["primary_model"],
+            temperature=float(config["monitor"]["temperature"]),
+            max_output_tokens=int(config["monitor"]["max_output_tokens"]),
+        )
     gate = PolicyGate(
         escalate_threshold=float(config["policy"]["escalate_threshold"]),
         block_on_alert=bool(config["policy"]["block_on_alert"]),
@@ -184,18 +234,67 @@ def main() -> int:
         output = item["output"]
         labels = item["labels"]
         started = perf_counter()
-        obs_alert, obs_score, obs_raw = observable_monitor.evaluate(
-            scenario, item["public_args"], output.tool_name
-        )
-        cot_alert, cot_score, cot_raw = cot_monitor.evaluate(output.reasoning, obs_alert)
-        nla_alert, nla_score, nla_raw = nla_monitor.evaluate(item["activation"])
-        elapsed = (perf_counter() - started) * 1000
-        channels = ChannelBundle(
-            observable=build_channel("observable", obs_alert, obs_score, env.get_assumed_cost("observable"), obs_raw, elapsed, api_calls=1),
-            cot=build_channel("cot", cot_alert, cot_score, env.get_assumed_cost("cot"), cot_raw, elapsed, api_calls=1),
-            probe=build_channel("probe", probe_alerts[index], probe_scores[index], env.get_assumed_cost("probe"), "loto-probe", 0.0),
-            nla=build_channel("nla", nla_alert, nla_score, env.get_assumed_cost("nla"), nla_raw, elapsed, api_calls=1),
-        )
+        _mock_nla_alert, _mock_nla_score, nla_raw = nla_monitor.evaluate(item["activation"])
+        if gemini_monitor is not None:
+            observable_text = pre_action_observable_transcript(scenario)
+            obs_result = gemini_monitor.evaluate(
+                policy=scenario["policy"],
+                observable_transcript=observable_text,
+                channel="observable",
+            )
+            cot_result = gemini_monitor.evaluate(
+                policy=scenario["policy"],
+                observable_transcript=observable_text,
+                channel="cot",
+                cot=output.reasoning,
+            )
+            nla_result = gemini_monitor.evaluate(
+                policy=scenario["policy"],
+                observable_transcript=observable_text,
+                channel="nla",
+                nla_text=nla_raw,
+            )
+            obs_alert = obs_result.verdict.actionable_alert
+            obs_score = obs_result.verdict.risk_score
+            cot_alert = cot_result.verdict.actionable_alert
+            cot_score = cot_result.verdict.risk_score
+            nla_alert = nla_result.verdict.actionable_alert
+            nla_score = nla_result.verdict.risk_score
+            channels = ChannelBundle(
+                observable=build_gemini_channel(
+                    "observable", obs_result, env.get_assumed_cost("observable")
+                ),
+                cot=build_gemini_channel(
+                    "cot", cot_result, env.get_assumed_cost("cot")
+                ),
+                probe=build_channel(
+                    "probe",
+                    probe_alerts[index],
+                    probe_scores[index],
+                    env.get_assumed_cost("probe"),
+                    "loto-probe",
+                    0.0,
+                ),
+                nla=build_gemini_channel(
+                    "nla",
+                    nla_result,
+                    env.get_assumed_cost("nla"),
+                    nla_text=nla_raw,
+                ),
+            )
+        else:
+            obs_alert, obs_score, obs_raw = observable_monitor.evaluate(
+                scenario, item["public_args"], output.tool_name
+            )
+            cot_alert, cot_score, cot_raw = cot_monitor.evaluate(output.reasoning, obs_alert)
+            nla_alert, nla_score = _mock_nla_alert, _mock_nla_score
+            elapsed = (perf_counter() - started) * 1000
+            channels = ChannelBundle(
+                observable=build_channel("observable", obs_alert, obs_score, env.get_assumed_cost("observable"), obs_raw, elapsed, api_calls=0),
+                cot=build_channel("cot", cot_alert, cot_score, env.get_assumed_cost("cot"), cot_raw, elapsed, api_calls=0),
+                probe=build_channel("probe", probe_alerts[index], probe_scores[index], env.get_assumed_cost("probe"), "loto-probe", 0.0),
+                nla=build_channel("nla", nla_alert, nla_score, env.get_assumed_cost("nla"), nla_raw, elapsed, api_calls=0),
+            )
         alerts = {
             "observable": obs_alert,
             "cot": cot_alert,
