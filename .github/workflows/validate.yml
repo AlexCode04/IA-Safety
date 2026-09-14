@@ -27,6 +27,19 @@ jobs:
           python scripts/run_experiment.py --reset-output
           python scripts/build_results.py
           python scripts/generate_paper_figures.py --allow-mock
+      - name: Install LaTeX
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends texlive-latex-base texlive-latex-extra texlive-pictures texlive-fonts-recommended
+      - name: Compile bilingual papers
+        working-directory: paper
+        run: |
+          for doc in main_en main_es; do
+            pdflatex -interaction=nonstopmode -halt-on-error "$doc.tex"
+            bibtex "$doc"
+            pdflatex -interaction=nonstopmode -halt-on-error "$doc.tex"
+            pdflatex -interaction=nonstopmode -halt-on-error "$doc.tex"
+          done
       - name: Verify synthetic provenance
         run: |
           python - <<'PY'
