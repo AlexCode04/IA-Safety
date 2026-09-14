@@ -100,6 +100,20 @@ python scripts/build_results.py
 streamlit run app/dashboard.py
 ```
 
+## Paper and publication figures
+
+The Overleaf-ready paper lives in `paper/main.tex` with its bibliography in
+`paper/references.bib`. Generate the two methodology figures at any time with:
+
+```bash
+pip install -r requirements-paper.txt
+python scripts/generate_paper_figures.py
+```
+
+After a frozen non-mock run, the same command generates the empirical plots and
+LaTeX result macros. It refuses to populate the paper from mock data by default.
+See `paper/README.md` and `paper/RESULTS_CHECKLIST.md` before submission.
+
 `run_gemini_monitor.py` resumes completed scenario/channel/model tuples by
 default. Pass `--overwrite` only when starting a new result set. The real API
 key belongs only in local `.env` as `GEMINI_API_KEY`; never add it to Git.

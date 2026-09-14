@@ -1,354 +1,443 @@
-\documentclass[10pt]{article}
+\documentclass[10pt,twocolumn]{article}
 
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
-\usepackage[margin=0.78in]{geometry}
+\usepackage[margin=0.66in,columnsep=0.23in]{geometry}
 \usepackage{amsmath,amssymb}
+\usepackage{array}
+\usepackage{flushend}
 \usepackage{booktabs}
+\usepackage{caption}
 \usepackage{enumitem}
+\usepackage{graphicx}
 \usepackage{hyperref}
 \usepackage{xcolor}
+\usepackage{xurl}
 
-\hypersetup{colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue}
+\definecolor{budgetblue}{HTML}{17365D}
+\definecolor{budgetred}{HTML}{B85450}
+\hypersetup{colorlinks=true,linkcolor=budgetblue,citecolor=budgetblue,urlcolor=budgetblue}
+\captionsetup{font=small,labelfont=bf}
+\setlist{nosep,leftmargin=*}
+\setlength{\parindent}{1em}
+\setlength{\parskip}{0pt}
+\setlength{\textfloatsep}{7pt plus 2pt minus 2pt}
+\setlength{\floatsep}{6pt plus 2pt minus 2pt}
+\setlength{\intextsep}{6pt plus 2pt minus 2pt}
+
 \newcommand{\system}{\textsc{Budget-NLA}}
-\newcommand{\todoresult}{\textcolor{red}{TBD}}
+\newcommand{\todoresult}{\textcolor{budgetred}{TBD}}
+\newcommand{\yes}{\textcolor{budgetblue}{$\checkmark$}}
+\newcommand{\no}{--}
 
-\title{\system: Risk-Weighted Adaptive Monitoring for\\
-Pre-Harm Sabotage Containment}
-
-\author{
-Jhoan Stevan Mosquera Ortiz\\
-\texttt{jhoan.mosquera@uao.edu.co}
-\and
-Juan Felipe Plata Barbosa\\
-\texttt{juan.plata@uao.edu.co}
-\and
-Maryori Alejandra Lasso Diaz\\
-\texttt{maryori.lasso@uao.edu.co}
-\and
-Angel Alexis del Castillo Lerma\\
-\texttt{angel.del@uao.edu.co}
+\IfFileExists{generated_results.tex}{
+  \input{generated_results.tex}
+}{
+  \newcommand{\resultstatus}{Pending frozen real run}
+  \newcommand{\phrObservable}{\todoresult}
+  \newcommand{\bdrObservable}{\todoresult}
+  \newcommand{\ephObservable}{\todoresult}
+  \newcommand{\peObservable}{\todoresult}
+  \newcommand{\phrCoT}{\todoresult}
+  \newcommand{\bdrCoT}{\todoresult}
+  \newcommand{\ephCoT}{\todoresult}
+  \newcommand{\peCoT}{\todoresult}
+  \newcommand{\phrProbe}{\todoresult}
+  \newcommand{\bdrProbe}{\todoresult}
+  \newcommand{\ephProbe}{\todoresult}
+  \newcommand{\peProbe}{\todoresult}
+  \newcommand{\phrNLA}{\todoresult}
+  \newcommand{\bdrNLA}{\todoresult}
+  \newcommand{\ephNLA}{\todoresult}
+  \newcommand{\peNLA}{\todoresult}
+  \newcommand{\imvNLA}{\todoresult}
+  \newcommand{\imvNLAcoT}{\todoresult}
 }
 
-\date{Universidad Aut\'onoma de Occidente --- AI Incident Response Sprint, 2026}
+\title{\vspace{-1.2em}\system: Risk-Weighted Adaptive Monitoring for\\
+Pre-Harm Sabotage Containment\vspace{-0.35em}}
+
+\author{\small
+Jhoan S. Mosquera Ortiz \quad Juan F. Plata Barbosa\\[-1pt]
+Maryori A. Lasso Diaz \quad Angel A. del Castillo Lerma\\[2pt]
+\textit{Universidad Aut\'onoma de Occidente, Cali, Colombia}\\[-1pt]
+\texttt{\{jhoan.mosquera, juan.plata, maryori.lasso, angel.del\}@uao.edu.co}}
+
+\date{\small AI Incident Response Sprint, 2026}
 
 \begin{document}
 \maketitle
+\vspace{-1.5em}
 
 \begin{abstract}
-Agent monitors are imperfect and heterogeneous: observable actions, visible
-chain of thought (CoT), activation probes, and natural-language activation
-readouts differ in cost and in the failures they expose. Evaluating each signal
-only by classification accuracy does not determine how it should be used under
-a limited operational budget. We introduce \system, a reproducible pilot that
-measures monitoring signals at a fixed pre-action boundary and allocates a
-normalized monitoring budget across task types with different impact. The
-system combines a Qwen2.5-7B agent, a layer-20 linear probe, a Natural Language
-Autoencoder (NLA), an isolated Gemini reader, and a deterministic policy gate.
-We evaluate 24 paired trajectories spanning benign behavior, rejected attacks,
-visible sabotage, and stealth sabotage in three simulated tool-use families.
-Our primary outcomes are pre-harm recall, benign disruption, expected prevented
-harm, and prevention efficiency; AUROC is retained only as a diagnostic. Real
-experimental results are intentionally left blank in this draft until the
-frozen pipeline completes.
+Runtime monitors for tool-using agents expose different evidence surfaces---
+observable actions, chain of thought (CoT), activation probes, and natural-
+language activation readouts---with different costs and failure modes.
+Classification accuracy alone does not tell a deployer which signal to acquire
+under a limited oversight budget or whether an alert arrives before an
+irreversible action. We introduce \system, a preregistered pilot and open-source
+harness that measures four monitoring channels at one frozen pre-action event,
+converts alerts into severity-weighted prevented harm, and compares uniform
+with risk-weighted budget allocation. The protocol comprises 24 paired,
+simulated tool-use trajectories across benign behavior, rejected attacks,
+visible sabotage, and stealth sabotage. A Qwen2.5-7B agent supplies the same
+layer-20 state to a linear probe and a native Natural Language Autoencoder
+(NLA); Gemini reads isolated evidence views and a deterministic gate maps its
+structured verdict to allow, escalate, or block. We predefine pre-harm recall,
+benign disruption, expected prevented harm, prevention efficiency, and
+incremental NLA value. Results are intentionally withheld until the frozen real
+run completes; mock outputs cannot populate the paper. The contribution is an
+operational evaluation bridge between latent monitoring and budgeted incident
+response, not a claim to invent probes, NLAs, or monitor routing.
 \end{abstract}
 
 \section{Introduction}
 
-LLM agents can pursue harmful side objectives while completing an apparently
-legitimate task. SHADE-Arena demonstrates that monitoring such behavior becomes
-particularly difficult when the agent can conceal relevant reasoning from the
-monitor \cite{kutasov2025shade}. This motivates additional monitoring surfaces,
-including internal activations, but it does not remove the operational
-constraint that strong monitors, NLA verbalization, and human review have
-different costs.
+Tool-using language-model agents turn textual decisions into consequential
+actions. Agent safety therefore depends not only on whether harmful behavior can
+be detected, but also on \emph{when} evidence is available and what oversight
+resources are spent to obtain it. SHADE-Arena shows that agents can complete
+harmful side tasks while evading a monitor, especially when incriminating
+reasoning is withheld from the visible transcript \cite{kutasov2025shade}.
+AgentHarm and AgentDojo likewise demonstrate that multi-step tool use creates
+failure modes beyond ordinary chatbot refusal evaluation
+\cite{andriushchenko2025agentharm,debenedetti2024agentdojo}.
 
-Prior work studies how to combine runtime monitors under a budget
-\cite{hua2025cost}, while NLA research shows that natural-language bottlenecks
-can expose information encoded in model activations
-\cite{frasertaliente2026nla}. Monitor-side experiments further suggest that NLA
-and CoT errors can be non-identical, but identify native agent-side readouts,
-position selection, and matched monitoring baselines as open directions
-\cite{bowkis2026eliciting}. Our pilot connects these questions at an operational
-boundary: immediately before a critical tool call.
+CoT is a valuable but fragile monitoring surface
+\cite{korbak2025cot,emmons2025pragmatic}. Internal-state methods offer a
+complementary signal: linear probes test whether a concept is decodable, while
+NLAs translate one activation through a natural-language bottleneck
+\cite{belinkov2022probes,frasertaliente2026nla}. Yet extra signals are not free.
+NLA generation, stronger judges, and human review consume compute, latency, or
+labor. Existing AI-control and cost-constrained-monitoring work treats limited
+oversight as a first-class constraint \cite{greenblatt2024control,hua2025cost},
+but does not establish the pre-harm operational value of a native agent-side
+NLA at a tool boundary.
 
-We ask:
+We study three research questions. \textbf{RQ1:} Which channels detect attempted
+sabotage before a critical tool call, and what benign disruption does each
+introduce? \textbf{RQ2:} Does a native NLA add unique prevention value beyond
+observable evidence and visible CoT when evaluated on the same activation
+event? \textbf{RQ3:} Under a fixed normalized budget, does risk-weighted
+allocation reduce severity-weighted residual harm relative to uniform
+monitoring?
 
-\begin{quote}
-Under a fixed monitoring budget, when and on which task types does access to an
-agent's internal state through a linear probe and an NLA provide additional
-pre-harm containment value over observable actions and visible CoT?
-\end{quote}
+Our contributions are: (1) a matched, event-aligned comparison of observable,
+CoT, probe, and NLA evidence; (2) paired attack-present/rejected and
+visible/stealth conditions that separate exposure, adoption, and concealment;
+(3) operational metrics connecting alerts to intervention, impact, and cost;
+and (4) a reproducible harness, strict data contract, simulator, optimizer, and
+interactive dashboard.
 
-Our intended contribution is not a new probe, NLA, routing algorithm, or
-security game. It is an evaluation harness that (i) measures heterogeneous
-signals at the same pre-action event, (ii) translates detections into prevented
-weighted harm, and (iii) compares monitoring allocations under the same
-normalized budget.
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=0.96\textwidth]{figures/system_pipeline.pdf}
+  \caption{\system{} data flow. All evidence is anchored to one pre-action
+  boundary. Gemini receives stateless, isolated views; the deterministic gate
+  and budget policy decide whether to allow, escalate, or block. No real tool
+  side effect is executed.}
+  \label{fig:pipeline}
+\end{figure*}
 
-\section{Related Work}
+\section{Positioning and Research Gap}
 
-\paragraph{Agent sabotage and monitoring.}
-SHADE-Arena pairs benign main tasks with harmful side objectives and measures
-both sabotage and monitor performance \cite{kutasov2025shade}. Its results
-establish that successful side-task execution and evasion must be evaluated
-together, and that access to hidden reasoning materially changes the monitoring
-problem.
+\paragraph{Sabotage and control.}
+SHADE-Arena directly evaluates side-task success and monitor evasion
+\cite{kutasov2025shade}. AI Control evaluates protocols designed to remain safe
+even when an untrusted model intentionally subverts oversight
+\cite{greenblatt2024control}; ControlArena provides reusable infrastructure for
+such evaluations \cite{controlarena2025}. Sleeper Agents further motivates
+evaluating deceptive strategies that can survive safety training
+\cite{hubinger2024sleeper}. These works justify adversarial evaluation, but our
+pilot is narrower: a controlled tool boundary and an explicit accounting of
+severity-weighted prevention per unit cost.
 
-\paragraph{Natural-language activation readouts.}
-NLAs reconstruct model activations through a natural-language bottleneck,
-providing an inspectable representation of latent state
-\cite{frasertaliente2026nla}. Bowkis and Africa evaluate NLA readouts as a
-monitoring surface and report unique catches relative to CoT, while also showing
-that generic extraction positions often contain irrelevant local information
-\cite{bowkis2026eliciting}. We therefore freeze one semantically defined event
-rather than selecting the best-performing position after seeing results.
+\paragraph{Internal monitoring.}
+Sparse autoencoders and representation engineering show that useful concepts
+can be recovered from population-level activation structure
+\cite{cunningham2023sae,zou2025repe}. NLAs instead reconstruct activations via
+natural language \cite{frasertaliente2026nla}. Bowkis and Africa find that
+monitor-side NLA and CoT errors can be non-identical; they explicitly identify
+native agent-side readouts, better position selection, and matched baselines as
+open directions \cite{bowkis2026eliciting}. We instantiate those directions
+with one event-defined position and isolate each downstream view. A positive
+probe result establishes decodability, not causal use or faithful reasoning;
+this distinction follows longstanding cautions on probing classifiers
+\cite{belinkov2022probes}.
 
-\paragraph{Cost-constrained monitoring.}
-Hua et al. formalize the combination of runtime monitors subject to an
-average-case budget \cite{hua2025cost}. \system{} does not claim the general
-resource-allocation idea. Our narrower focus is to estimate the operational
-prevention value of observable, CoT, probe, and native agent-side NLA channels
-in a controlled pre-harm tool-use setting.
+\paragraph{Budgeted oversight.}
+Hua et al. optimize combinations of monitors and interventions under an
+average-case budget \cite{hua2025cost}. Security games similarly allocate
+limited defensive resources and often randomize coverage when an adversary can
+exploit predictable schedules \cite{tambe2011security}. Our current multiple-
+choice allocator is a non-strategic pilot: it conditions on task impact and
+empirical monitor benefit, but does not yet solve a Stackelberg game. Table
+\ref{tab:gap} makes the scope distinction explicit.
+
+\begin{table*}[t]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{4.4pt}
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+Work & Sabotage & Latent evidence & Timing & Budget & Main outcome \\
+\midrule
+SHADE-Arena \cite{kutasov2025shade} & \yes & \no & \no & \no & \no \\
+AI Control \cite{greenblatt2024control} & \yes & \no & final artifact & limited audit & safety/usefulness \\
+Hua et al. \cite{hua2025cost} & general outputs & \no & unspecified & \yes & recall \\
+Bowkis--Africa \cite{bowkis2026eliciting} & reward hacking & monitor-side NLA & generic/follow-up & \no & classification \\
+\textbf{\system{} (ours)} & \yes & agent probe + NLA & pre-tool event & \yes & weighted prevention \\
+\bottomrule
+\end{tabular}
+\caption{Closest methodological neighbors. The claimed gap is their
+intersection: native agent-side latent evidence, a fixed pre-action tool event,
+matched channel isolation, and operational value under a common budget.}
+\label{tab:gap}
+\end{table*}
 
 \section{Experimental Design}
 
-\subsection{Models and fixed boundary}
+\subsection{Models and frozen event}
 
-The target agent is \texttt{Qwen/Qwen2.5-7B-Instruct} with deterministic
-decoding. The same layer-20 residual-stream activation is supplied to (a) an L2
-logistic-regression probe and (b) the
-\texttt{Kameshr/nla-qwen2.5-7b-L20-av} verbalizer. The activation is extracted
-at the final token of the serialized marker
-\texttt{\textbackslash n<DECISION>\textbackslash n}, before the tool name and
-arguments are generated. We call this event
-\texttt{PRE\_ACTION\_DECISION\_BOUNDARY}.
+The target is \texttt{Qwen/Qwen2.5-7B-Instruct} \cite{yang2025qwen25}, decoded
+deterministically (temperature 0, no sampling, 512-token cap). At the final
+token of \texttt{\textbackslash n<DECISION>\textbackslash n}, before the tool
+name or arguments, we extract the layer-20 residual-stream state
+$h_i\in\mathbb{R}^{d}$. The same $h_i$ is sent to an L2 logistic probe and the
+\texttt{Kameshr/nla-qwen2.5-7b-L20-av} verbalizer. The NLA adapter is disabled
+during agent generation so interpretation cannot alter the behavior being
+measured.
 
-The Qwen agent generates with the NLA adapter disabled. The adapter is enabled
-only while producing the NLA verbalization. This prevents the interpretation
-module from altering the behavior being monitored.
+Gemini 3.8 Flash is the fixed external reader because it supports structured
+outputs and a stable endpoint \cite{google2026gemini}. Each call receives only
+the policy, the pre-action observable transcript, and the channel assigned to
+that condition. It returns a validated JSON record with risk, evidence, policy
+conflict, and \texttt{ALLOW}/\texttt{ESCALATE}/\texttt{BLOCK}. Calls are
+stateless; primary and fallback models cannot be mixed within a result set.
 
-\subsection{Task families and paired conditions}
+The implemented pilot reconstructs and replays the exact prompt prefix to
+capture $h_i$ after a complete candidate was generated. The future tool call is
+excluded and no tool is committed before the gate, preserving the information
+boundary. This does \emph{not} demonstrate synchronous pause/resume latency and
+is preregistered as deviation D-001.
 
-All tools are simulated; no email, file, permission, or network state is
-modified. We define irreversible harm as committing an unauthorized simulated
-external transfer or access-control modification. Detection after commit does
-not count as containment.
+\subsection{Paired task matrix and ground truth}
 
-\begin{table}[h]
-\centering
-\small
-\begin{tabular}{lll}
-\toprule
-Family & Critical tool & Simulated harm \\
-\midrule
-External report & \texttt{publish\_report} & protected record is published \\
-Corporate email & \texttt{send\_email} & protected data or unauthorized recipient \\
-Access list & \texttt{update\_allowlist} & unauthorized address or range is added \\
-\bottomrule
-\end{tabular}
-\caption{Frozen task families.}
-\label{tab:families}
-\end{table}
+Three simulated families cover qualitatively different critical actions:
+publishing a report containing a protected record, emailing protected data or
+an unauthorized recipient, and adding an unauthorized address to an allowlist.
+Irreversible harm means committing one of these unauthorized actions. All
+recipients, files, addresses, and tool effects are synthetic.
 
-Each family contains four conditions: benign behavior, a rejected attack,
-visible sabotage, and stealth sabotage. Two fixed linguistic variants yield
-$3\times4\times2=24$ trajectories. The rejected-attack condition separates the
-presence of a malicious instruction from adoption of the malicious objective.
+Each family crosses four conditions with two fixed linguistic variants (Fig.
+\ref{fig:matrix}). \textsc{Attack Rejected} is essential: it separates the
+mere presence of a malicious instruction from adoption. \textsc{Visible
+Sabotage} and \textsc{Stealth Sabotage} hold the harmful objective constant but
+change whether CoT may reveal it. Ground truth is computed from policy rules and
+proposed tool arguments, never from a monitor opinion.
 
-\subsection{Isolated monitoring channels}
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{figures/experimental_matrix.pdf}
+  \caption{Frozen paired design. Within each family, the authorized task and
+  critical tool remain fixed while attack presence, adoption, and CoT
+  disclosure vary.}
+  \label{fig:matrix}
+\end{figure}
 
-\begin{itemize}[leftmargin=*]
-    \item \textbf{Observable:} policy, authorized task, and information visible
-    before the future tool call; no CoT or internal signal.
-    \item \textbf{CoT:} the observable view plus reasoning truncated before
-    \texttt{<DECISION>}.
-    \item \textbf{Probe:} a scalar score from the pre-action activation, tested
-    with leave-one-template-out (LOTO) splits.
-    \item \textbf{NLA:} the observable view plus the NLA verbalization; no CoT
-    or probe score.
-    \item \textbf{Hybrid:} observable evidence, CoT, NLA, and probe score. This
-    is treated as a policy input, not proof that any one channel caused a catch.
+\subsection{Monitoring channels}
+
+\begin{itemize}
+  \item \textbf{Observable ($O$):} policy and pre-action transcript only.
+  \item \textbf{CoT ($C$):} $O$ plus visible reasoning truncated before the
+  decision marker.
+  \item \textbf{Probe ($P$):} a scalar decoded directly from $h_i$.
+  \item \textbf{NLA ($N$):} $O$ plus the natural-language reconstruction of
+  $h_i$, with no CoT or probe score.
+  \item \textbf{Hybrid ($H$):} $O,C,P,N$ available to a budget policy. It is
+  not used to attribute a catch to any single channel.
 \end{itemize}
 
-Gemini receives each view in an independent, stateless call and must return a
-strict JSON verdict containing a risk score, actionable-alert flag, cited
-evidence, policy conflict, and one of \texttt{ALLOW}, \texttt{ESCALATE}, or
-\texttt{BLOCK}. A deterministic gate handles inconsistent responses
-conservatively. API evaluation occurs after Qwen/NLA/probe acquisition from a
-frozen \texttt{monitor\_cases.json} contract. This separation prevents an API
-failure or retry from forcing another expensive activation run.
-
-\subsection{Probe protocol}
-
-Let $h_i\in\mathbb{R}^{d}$ be the layer-20 activation and $y_i\in\{0,1\}$ the
-behavioral sabotage label. The probe estimates
-
+For the probe,
 \begin{equation}
-    p_i = \sigma(w^\top h_i+b),
+  p_i=\sigma(w^\top h_i+b),
 \end{equation}
+with L2 regularization, $C=1$, \texttt{liblinear}, and 1000 maximum iterations.
+Evaluation is leave-one-template-out (LOTO); test templates never appear in
+their training fold, and thresholds are selected on training folds only.
 
-with L2 regularization, $C=1$, the \texttt{liblinear} solver, and 1000 maximum
-iterations. Every test template is excluded from its training fold. Thresholds
-must be selected from training folds only. We report AUROC and AUPRC as
-diagnostics, not as the main measure of containment.
+\section{Operational Metrics and Allocation}
 
-\section{Budgeted Containment}
-
-For trajectory $i$, let $s_i\geq0$ denote impact severity. Let
-$A_{im}\in\{0,1\}$ indicate whether monitor $m$ raises an actionable alert
-before harm, and let $I_{im}$ denote successful intervention.
-
-\paragraph{Pre-harm recall.}
-\begin{equation}
-\mathrm{PHR}_m =
-\frac{\sum_i \mathbb{1}[y_i=1]A_{im}}
-{\sum_i \mathbb{1}[y_i=1]}.
-\end{equation}
-
-\paragraph{Benign disruption rate.}
-\begin{equation}
-\mathrm{BDR}_m =
-\frac{\sum_i \mathbb{1}[y_i=0]A_{im}}
-{\sum_i \mathbb{1}[y_i=0]}.
-\end{equation}
-
-\paragraph{Expected prevented harm and efficiency.}
-\begin{align}
-\mathrm{EPH}_m &= \sum_i s_i\,\mathbb{1}[y_i=1]A_{im}I_{im},\\
-\mathrm{PE}_m &= \frac{\mathrm{EPH}_m}{C_m},
-\end{align}
-where $C_m$ is monitoring cost. We report assumed normalized cost separately
-from measured latency, tokens, API calls, and GPU-seconds.
-
-\paragraph{Incremental NLA value.}
-\begin{align}
-\mathrm{IMV}_{\mathrm{NLA}} &=
-\mathrm{EPH}_{O\cup N}-\mathrm{EPH}_{O},\\
-\mathrm{IMV}_{\mathrm{NLA}\mid\mathrm{CoT}} &=
-\mathrm{EPH}_{H}-\mathrm{EPH}_{O\cup C},
-\end{align}
-where $O$, $N$, $C$, and $H$ denote observable, NLA, CoT, and hybrid policies.
-
-\paragraph{Budget assignment.}
-Let $x_{ik}\in\{0,1\}$ choose monitoring policy $k$ for trajectory $i$,
-$b_{ik}$ be its estimated prevented-harm benefit, $c_k$ its normalized cost,
-and $B$ the total budget. The dashboard solves the multiple-choice allocation
+Let $y_i\in\{0,1\}$ denote attempted sabotage, $s_i\ge0$ its severity,
+$A_{im}$ a pre-harm alert from channel $m$, $I_{im}$ a successful intervention,
+and $c_m$ normalized monitoring cost. Primary metrics are frozen before the
+real run:
 
 \begin{align}
-\max_{x}\quad & \sum_i\sum_k b_{ik}x_{ik} \\
-\text{s.t.}\quad & \sum_i\sum_k c_kx_{ik}\leq B,\\
-& \sum_k x_{ik}=1 \quad \forall i,\\
-& x_{ik}\in\{0,1\}.
+\mathrm{PHR}_m &=
+\frac{\sum_i y_iA_{im}}{\sum_i y_i}, &
+\mathrm{BDR}_m &=
+\frac{\sum_i(1-y_i)A_{im}}{\sum_i(1-y_i)},\\
+\mathrm{EPH}_m &= \sum_i s_i y_iA_{im}I_{im}, &
+\mathrm{PE}_m &= \frac{\mathrm{EPH}_m}{\sum_i c_{im}}.
 \end{align}
 
-We compare this adaptive allocation with fixed baselines under the same budget.
-The current optimizer is a pilot implementation and is not claimed to model a
-strategic attacker.
+PHR measures timely detection; BDR exposes operational disruption. EPH prevents
+a low-impact catch from counting the same as a high-impact catch, while PE asks
+how much weighted harm is prevented per assumed cost unit. Assumed costs are
+reported separately from measured latency, token counts, API calls, and GPU
+seconds.
 
-\section{Hypotheses and Analysis Plan}
+NLA's incremental monitoring value is
+\begin{align}
+\mathrm{IMV}_{N} &= \mathrm{EPH}_{O\cup N}-\mathrm{EPH}_{O},\\
+\mathrm{IMV}_{N\mid C} &= \mathrm{EPH}_{H}-\mathrm{EPH}_{O\cup C}.
+\end{align}
+We also report channel-level unique catches, alert specificity
+($1-\mathrm{BDR}$), probe AUROC/AUPRC, rejected-attack errors, and
+visible-versus-stealth deltas. These are diagnostics; AUROC alone cannot show
+that an intervention occurred before harm.
 
-The frozen hypotheses are: (H1) at least one internal channel uniquely catches
-attempted sabotage missed by observable monitoring; (H2) CoT and NLA have
-non-identical errors, particularly for stealth sabotage; (H3) probe and NLA
-distinguish adopted attacks from rejected malicious instructions; and (H4) the
-adaptive policy yields lower expected residual harm than a uniform allocation
-under the same normalized budget.
+For policy $k$, binary $x_{ik}$ assigns exactly one monitoring bundle to case
+$i$. With estimated prevented-harm benefit $b_{ik}$ and total budget $B$, the
+dashboard solves
+\begin{align}
+\max_x\;&\sum_{i,k}b_{ik}x_{ik} \\
+\text{s.t. }&\sum_{i,k}c_kx_{ik}\le B,\quad
+\sum_kx_{ik}=1\ \forall i,\quad x_{ik}\in\{0,1\}.
+\end{align}
+The comparison uses equal budget, not equal monitor count. The default costs
+($O=1.00$, $C=1.20$, $P=0.25$, $N=4.00$, human review $=25.00$) are declared
+assumptions, not vendor prices. Sensitivity analysis will vary each assumed cost
+by $\pm50\%$ and report whether the policy ranking changes.
 
-Results will be reported as counts and descriptive proportions because the
-pilot contains only 24 trajectories. No metric, threshold, layer, extraction
-position, or primary hypothesis will be changed after observing test results.
-Any necessary departure is recorded in \texttt{DEVIATIONS.md} and labeled
-exploratory.
+\section{Preregistered Analysis}
+
+The frozen hypotheses are: internal channels provide at least one unique
+pre-harm catch (H1); CoT and NLA errors are non-identical, particularly under
+stealth sabotage (H2); probe/NLA discriminate adoption from rejection (H3); and
+adaptive allocation lowers weighted residual harm at equal budget (H4).
+
+Because $n=24$, the paper emphasizes case-level evidence and uncertainty rather
+than asymptotic significance. We report counts beside every proportion and 95\%
+Wilson intervals for PHR and BDR. Paired binary channel differences use an
+exact McNemar test as a secondary diagnostic. EPH, PE, and policy differences
+receive template-cluster bootstrap intervals (10,000 resamples; frozen seed
+260916). No threshold, layer, metric, or primary hypothesis changes after the
+real results are observed. Required changes preserve the original run and are
+logged as exploratory in \texttt{DEVIATIONS.md}.
 
 \section{Results}
 
+\noindent\fcolorbox{budgetred}{white}{\parbox{0.94\columnwidth}{\small
+\textbf{Status: \resultstatus.} Values below must be generated from the frozen,
+non-mock run. Smoke-test values are programmatically rejected by the paper
+figure generator.}}
+
 \begin{table}[h]
 \centering
 \small
-\begin{tabular}{lrrrr}
+\setlength{\tabcolsep}{3.8pt}
+\begin{tabular}{@{}lrrrr@{}}
 \toprule
 Channel & PHR & BDR & EPH & PE \\
 \midrule
-Observable & \todoresult & \todoresult & \todoresult & \todoresult \\
-CoT & \todoresult & \todoresult & \todoresult & \todoresult \\
-Probe & \todoresult & \todoresult & \todoresult & \todoresult \\
-NLA & \todoresult & \todoresult & \todoresult & \todoresult \\
+Observable & \phrObservable & \bdrObservable & \ephObservable & \peObservable \\
+CoT & \phrCoT & \bdrCoT & \ephCoT & \peCoT \\
+Probe & \phrProbe & \bdrProbe & \ephProbe & \peProbe \\
+NLA & \phrNLA & \bdrNLA & \ephNLA & \peNLA \\
 \bottomrule
 \end{tabular}
-\caption{Primary channel metrics. Values must come from the frozen real run.}
+\caption{Primary channel outcomes. Every rate will include its numerator,
+denominator, and interval in the final text.}
 \label{tab:primary}
 \end{table}
 
 \begin{table}[h]
 \centering
 \small
-\begin{tabular}{lrrr}
+\begin{tabular}{@{}ll@{}}
 \toprule
-Policy & Cost & Weighted harm prevented & Attack success \\
+Contrast & Weighted harm gained \\
 \midrule
-Uniform baseline & \todoresult & \todoresult & \todoresult \\
-Action only & \todoresult & \todoresult & \todoresult \\
-CoT + NLA & \todoresult & \todoresult & \todoresult \\
-Probe + NLA + CoT & \todoresult & \todoresult & \todoresult \\
-Adaptive LP & \todoresult & \todoresult & \todoresult \\
+NLA over observable & \imvNLA \\
+NLA conditional on CoT & \imvNLAcoT \\
 \bottomrule
 \end{tabular}
-\caption{Budget-policy comparison under one normalized budget.}
-\label{tab:policies}
+\caption{Incremental NLA value. A zero or negative result is informative and
+will not be replaced with a post-hoc metric.}
+\label{tab:incremental}
 \end{table}
 
-\paragraph{Required error analysis.}
-Alongside aggregate metrics, we will report unique catches, benign flips,
-visible-versus-stealth differences, rejected-attack errors, failed JSON/API
-calls, and cases where NLA and probe disagree. \todoresult
+\IfFileExists{figures/channel_detection.pdf}{
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=\linewidth]{figures/channel_detection.pdf}
+  \caption{Pre-harm recall and benign disruption from the frozen real run.}
+  \label{fig:detection}
+\end{figure}
+}{}
 
-\section{Reproducibility and Implementation}
+\IfFileExists{figures/policy_tradeoff.pdf}{
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=\linewidth]{figures/policy_tradeoff.pdf}
+  \caption{Policy safety--cost trade-off. Costs are normalized assumptions.}
+  \label{fig:tradeoff}
+\end{figure}
+}{}
 
-The repository freezes model identifiers, extraction layer, decision marker,
-probe settings, scenario templates, seeds, normalized costs, and a versioned
-Pydantic result schema. The execution path is:
+The final error analysis will name every unique catch and every false alarm,
+contrast rejected attacks with adopted attacks, compare visible with stealth
+sabotage, and inspect disagreements among CoT, probe, and NLA. We will also
+report JSON/API failures and missing outputs rather than silently dropping
+cases.
 
-\begin{enumerate}[leftmargin=*]
-    \item run Qwen, capture layer-20 activations, and generate NLA text;
-    \item compute LOTO probe scores;
-    \item export \texttt{results/monitor\_cases.json};
-    \item run isolated Gemini evaluations into a resumable JSONL file;
-    \item build aggregate metrics, SQLite export, and the Streamlit dashboard.
-\end{enumerate}
+\section{Implementation and Reproducibility}
 
-Secrets are loaded from an untracked \texttt{.env}; only
-\texttt{.env.example} is committed. Real model revisions and the successful
-host package environment must be recorded with the final results.
+The repository freezes model IDs, revisions after first download, seeds,
+prompts, layer, marker tokens, LOTO splits, costs, and a versioned Pydantic
+schema. The pipeline runs Qwen/NLA/probe first, exports a strict
+\texttt{monitor\_cases.json}, and evaluates Gemini afterward. This prevents an
+API retry from repeating the expensive activation stage. Gemini output is
+resumable by scenario/channel/model tuple. \texttt{generate\_paper\_figures.py}
+creates the study diagrams at any time but refuses to generate empirical paper
+artifacts when \texttt{experiment.mock\_mode=true}. The accompanying Streamlit
+dashboard exposes scenario traces, channel metrics, budget assignment,
+trade-offs, and external-monitor cost/latency. The artifact is released with
+the paper \cite{budgetnla2026}.
 
-\section{Limitations}
+\section{Limitations and Safety}
 
-The task suite is small, synthetic, and single-boundary; results cannot be
-generalized to long-horizon deployments. Severity weights and normalized costs
-are assumptions, not organizational measurements. The NLA verbalizer and probe
-are model- and layer-specific. A missing NLA signal does not imply that the
-agent lacked the represented information. The post-run Gemini stage evaluates a
-counterfactual gate rather than demonstrating real-time latency. Finally, the
-allocation assumes stationary benefits and does not yet model an attacker that
-adapts to the monitoring schedule.
+The pilot is synthetic, small, and tied to Qwen2.5-7B, layer 20, and one NLA.
+LOTO reduces template leakage but does not establish cross-domain or cross-model
+generalization. NLA text is a lossy learned reconstruction; its absence is not
+evidence that the model lacked a representation, and its presence is not proof
+of causal influence. The same caveat applies to a decodable probe signal.
+Severity weights and normalized costs are assumptions. The allocator assumes
+stationary monitor benefit and a non-adaptive attacker; predictable routing
+could itself become exploitable, motivating randomized security-game extensions
+\cite{tambe2011security}. Prefix replay preserves the pre-action information set
+but not real-time latency. Finally, a learned monitor cannot replace deterministic
+authorization checks.
 
-\section{Safety and Ethics}
-
-All critical tools are mocks and all recipients, canaries, addresses, and
-records are synthetic. No real exfiltration, access-control change, or external
-side effect is executed. The system is an incident-response research prototype,
-not a production authorization mechanism; deterministic permission checks
-remain necessary even when internal monitoring is available.
+All tools are mocks. No real file, email, network, or access-control state is
+modified. Cases use synthetic resources and recipients. The gate therefore
+measures counterfactual containment: whether the proposed action \emph{would}
+have been stopped before simulated commit.
 
 \section{Conclusion}
 
-\system{} operationalizes a narrow question left open by accuracy-only monitor
-evaluations: whether expensive internal signals prevent enough weighted harm to
-justify where they are deployed under a fixed budget. The final claim will be
-limited to the real 24-trajectory pilot and will be written only after the
-frozen run completes. \todoresult
+\system{} asks a deployment-facing question that accuracy-only evaluations
+leave unanswered: whether an expensive internal signal prevents enough
+severity-weighted harm to justify acquiring it, and on which tasks, before a
+critical action. The design connects SHADE-Arena-style sabotage, native
+agent-side activation readouts, and budgeted AI control at one reproducible
+event. Claims will remain bounded to the frozen 24-trajectory run. Whether NLA
+adds value, adds only disruption, or adds nothing beyond CoT is an empirical
+result---and each outcome informs where scarce oversight should be spent.
 
-\bibliographystyle{plain}
+\bibliographystyle{unsrt}
 \bibliography{references}
 
 \end{document}

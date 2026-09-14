@@ -1,0 +1,3 @@
+# Reproducible paper figures. LaTeX itself is installed separately.
+matplotlib==3.10.8
+numpy==2.2.3
