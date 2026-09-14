@@ -76,6 +76,7 @@ class RealAgentRunner:
             messages, tokenize=False, add_generation_prompt=True
         )
         enc = self.tokenizer(text, return_tensors="pt")
+        enc = {k: v.to(self.model_obj.device) for k, v in enc.items()}
         adapter_context = (
             self.model_obj.disable_adapter()
             if hasattr(self.model_obj, "disable_adapter")

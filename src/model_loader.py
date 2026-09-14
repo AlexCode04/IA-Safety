@@ -77,7 +77,22 @@ class ModelLoader:
             with torch.device("cpu"):
                 mod.__init__(mod.config)
 
+    def _load_gpu(self) -> tuple[Any, Any]:
+        base = AutoModelForCausalLM.from_pretrained(
+            self.base_model,
+            torch_dtype=torch.bfloat16,
+            attn_implementation="eager",
+        )
+        base.to("cuda")
+        self.model = PeftModel.from_pretrained(base, self._snapshot(self.verbalizer))
+        self.model.to("cuda")
+        self.model.eval()
+        self.tokenizer = AutoTokenizer.from_pretrained(self.base_model)
+        return self.model, self.tokenizer
+
     def load(self) -> tuple[Any, Any]:
+        if torch.cuda.is_available():
+            return self._load_gpu()
         snapshot = self._snapshot(self.base_model)
         config = AutoConfig.from_pretrained(snapshot, attn_implementation="eager")
         with torch.device("meta"):

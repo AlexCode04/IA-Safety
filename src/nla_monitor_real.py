@@ -38,6 +38,7 @@ class NlaMonitor:
             add_generation_prompt=True,
         )
         enc = self.tokenizer(text, return_tensors="pt")
+        enc = {k: v.to(self.model.device) for k, v in enc.items()}
         input_ids = enc["input_ids"]
         embed = self.model.get_input_embeddings()(input_ids).clone()
 
@@ -50,7 +51,7 @@ class NlaMonitor:
         if inject_pos < 0:
             raise ValueError(f"Inyeccion fallida: token {INJECTION_CHAR} no presente.")
 
-        embed[0, inject_pos] = activation.to(embed.dtype)
+        embed[0, inject_pos] = activation.to(device=embed.device, dtype=embed.dtype)
 
         with torch.no_grad():
             out = self.model.generate(

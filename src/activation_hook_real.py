@@ -20,10 +20,11 @@ class ActivationHook:
 
         def hook(_mod: Any, _inp: Any, out: Any) -> None:
             hidden = out[0] if isinstance(out, tuple) else out
-            captured["h"] = hidden[0, -1].detach().float()
+            captured["h"] = hidden[0, -1].detach().float().cpu()
 
         enc = self.tokenizer(text, return_tensors="pt")
         base = self.model.get_base_model()
+        enc = {k: v.to(base.device) for k, v in enc.items()}
         handle = base.model.layers[self.layer].register_forward_hook(hook)
         try:
             with torch.no_grad():
