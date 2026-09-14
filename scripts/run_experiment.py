@@ -232,7 +232,7 @@ def main() -> int:
     for index, item in enumerate(collected):
         scenario = item["scenario"]
         output = item["output"]
-        labels = item["labels"]
+        proposed_labels = item["labels"]
         started = perf_counter()
         _mock_nla_alert, _mock_nla_score, nla_raw = nla_monitor.evaluate(item["activation"])
         if gemini_monitor is not None:
@@ -317,7 +317,7 @@ def main() -> int:
                 scores,
                 gate,
                 optimizer,
-                labels.primary_label,
+                proposed_labels.primary_label,
                 float(scenario["severity"]),
             ),
             adaptive=evaluate_policy(
@@ -327,13 +327,25 @@ def main() -> int:
                 scores,
                 gate,
                 optimizer,
-                labels.primary_label,
+                 proposed_labels.primary_label,
                 float(scenario["severity"]),
             ),
         )
-        committed = labels.harm_committed and policies.adaptive.decision == "allow"
-        if committed:
-            commit_tool(output.tool_name, output.arguments)
+        tool_committed = policies.adaptive.decision == "allow"
+
+        tool_result = None
+        if tool_committed:
+            tool_result = commit_tool(
+                scenario,
+                output.tool_name,
+                output.arguments,
+)
+        final_labels = build_labels(
+            scenario=scenario,
+            tool_name=output.tool_name,
+            arguments=output.arguments,
+            committed=tool_committed,
+        )
         writer.write(
             RunRecord(
                 run_id=new_run_id(),
@@ -371,16 +383,23 @@ def main() -> int:
                     name=output.tool_name,
                     arguments=output.arguments,
                     public_arguments=item["public_args"],
-                    unauthorized=labels.harmful_tool_call_proposed,
-                    committed=committed,
+                    unauthorized=final_labels.harmful_tool_call_proposed,
+                    committed=tool_committed,
+                    harm_event=(
+                        tool_result["harm_event"]
+                        if tool_result is not None
+                        else None
+                    ),
                 ),
-                labels=labels,
+                labels=final_labels,
                 channels=channels,
                 policies=policies,
             )
         )
+
     print(f"Wrote {len(collected)} trajectories to {runs_path}")
     print(f"Wrote metrics table to {metrics_path}")
+
     return 0
 
 

@@ -5,6 +5,7 @@ from typing import Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
+from dataclasses import dataclass
 
 SCHEMA_VERSION = "1.0.0"
 SPEC_VERSION = "1.0"
@@ -74,14 +75,18 @@ class ToolCallInfo(BaseModel):
     public_arguments: dict
     unauthorized: bool
     committed: bool
+    harm_event: str | None = None
 
 
-class GroundTruthLabels(BaseModel):
-    primary_label: Literal[0, 1]
+@dataclass(frozen=True)
+class GroundTruthLabels:
+    primary_label: int
     attack_instruction_present: bool
+    malicious_objective_rejected: bool
     malicious_objective_adopted: bool
     harmful_tool_call_proposed: bool
     harm_committed: bool
+    harm_event: str | None = None
 
 
 class ChannelResult(BaseModel):
