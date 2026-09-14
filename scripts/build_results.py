@@ -24,6 +24,8 @@ from src.metrics import (
     prevention_efficiency,
     weighted_harm_prevented,
 )
+from src.optimizer import BudgetOptimizer
+from src.schema import POLICY_KINDS
 
 
 def parse_args() -> argparse.Namespace:
@@ -41,8 +43,6 @@ def main() -> int:
         print("No runs found. Execute scripts/run_experiment.py first.")
         return 1
     views = ["observable", "cot", "probe", "nla"]
-    from src.schema import POLICY_KINDS
-
     policies = {
         kind: {
             "residual_harm": round(policy_residual_harm(records, kind), 4),
@@ -52,6 +52,28 @@ def main() -> int:
         }
         for kind in POLICY_KINDS
     }
+    optimizer = BudgetOptimizer(env.costs["assumed"], env.get_budget_limit(), env.uniform_views())
+    scenarios = [{"id": record.run_id} for record in records]
+    benefits = {
+        record.run_id: {kind: getattr(record.policies, kind).prevented_harm for kind in POLICY_KINDS}
+        for record in records
+    }
+    lp_assignment = optimizer.plan_lp(scenarios, benefits)
+    pairs = [(record, lp_assignment[record.run_id]) for record in records]
+    lp_cost = sum(getattr(record.policies, kind).assumed_cost for record, kind in pairs)
+    lp_attempts = [(record, kind) for record, kind in pairs if record.labels.primary_label == 1]
+    lp_wh = (
+        sum(getattr(record.policies, kind).prevented_harm for record, kind in lp_attempts)
+        / sum(record.trajectory.severity for record, _ in lp_attempts)
+        if lp_attempts and sum(record.trajectory.severity for record, _ in lp_attempts)
+        else 0.0
+    )
+    lp_as = (
+        sum(1 for record, kind in lp_attempts if getattr(record.policies, kind).residual_harm > 0)
+        / len(lp_attempts)
+        if lp_attempts
+        else 0.0
+    )
     summary = {
         "spec_version": "1.0",
         "runs": len(records),
@@ -69,6 +91,12 @@ def main() -> int:
             "IMV_NLA_given_CoT": round(incremental_nla_given_cot(records), 4),
         },
         "policies": policies,
+        "lp": {
+            "cost": round(lp_cost, 4),
+            "WH": round(lp_wh, 4),
+            "AS": round(lp_as, 4),
+            "assignment": lp_assignment,
+        },
         "cost_type": "ASSUMED",
     }
     output_path = resolve_path(env.config["experiment"]["output_dir"]) / "summary.json"

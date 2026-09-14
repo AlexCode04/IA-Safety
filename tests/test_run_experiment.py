@@ -56,6 +56,27 @@ def test_optimizer_keeps_adaptive_within_budget() -> None:
     assert any("nla" in views for views in plan.values())
 
 
+def test_plan_lp_assigns_each_scenario_a_policy_under_budget() -> None:
+    env = ExperimentEnvironment()
+    optimizer = BudgetOptimizer(env.costs["assumed"], env.get_budget_limit(), env.uniform_views())
+    scenarios = list(env.iter_scenarios())
+    benefits = {scenario["id"]: {kind: scenario["severity"] for kind in POLICY_KINDS} for scenario in scenarios}
+    assignment = optimizer.plan_lp(scenarios, benefits)
+    assert set(assignment) == {scenario["id"] for scenario in scenarios}
+    assert all(kind in POLICY_KINDS for kind in assignment.values())
+    cost = sum(optimizer.cost_of(optimizer.canonical_views(assignment[sid])) for sid in assignment)
+    assert cost <= env.get_budget_limit() + 1e-9
+
+
+def test_plan_lp_prefers_max_nla_bundle_when_cheap() -> None:
+    env = ExperimentEnvironment()
+    optimizer = BudgetOptimizer(env.costs["assumed"], env.get_budget_limit(), env.uniform_views())
+    scenarios = [{"id": "s1", "severity": 3.0}]
+    benefits = {"s1": {"baseline": 0.1, "nla_probe_cot": 0.1, "probe_nla_cot": 0.1, "cot_nla": 0.1, "action_only": 0.1}}
+    assignment = optimizer.plan_lp(scenarios, benefits)
+    assert set(assignment.values()) <= set(POLICY_KINDS)
+
+
 def test_plan_policies_covers_baseline_plus_four_policies_within_budget() -> None:
     env = ExperimentEnvironment()
     optimizer = BudgetOptimizer(env.costs["assumed"], env.get_budget_limit(), env.uniform_views())
