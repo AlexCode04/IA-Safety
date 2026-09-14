@@ -27,6 +27,16 @@ jobs:
           python scripts/run_experiment.py --reset-output
           python scripts/build_results.py
           python scripts/generate_paper_figures.py --allow-mock
+      - name: Dashboard schema and JavaScript smoke test
+        run: |
+          node --check app/web/app.js
+          python - <<'PY'
+          from streamlit.testing.v1 import AppTest
+          app = AppTest.from_file("app/dashboard.py")
+          app.run(timeout=30)
+          assert not app.exception
+          print("Dashboard integration: PASS")
+          PY
       - name: Install LaTeX
         run: |
           sudo apt-get update
