@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-"""Budget-NLA dashboard with Spanish/English language toggle."""
+"""Bilingual Budget-NLA dashboard for signals, policies and Gemini results."""
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -15,236 +16,306 @@ if str(ROOT) not in sys.path:
 
 from src.environment import ExperimentEnvironment, resolve_path
 from src.metrics import (
+    attack_success_probability,
     benign_disruption_rate,
     expected_prevented_harm,
+    incremental_nla_value,
     load_run_records,
     policy_residual_harm,
     pre_harm_recall,
+    weighted_harm_prevented,
 )
+from src.schema import POLICY_KINDS
+
 
 TEXT = {
     "es": {
-        "page_title": "Budget-NLA",
         "language": "Idioma",
         "caption": (
-            "Monitoreo adaptativo para detener sabotaje antes de que cause da\u00f1o. "
-            "Los costos mostrados son valores de referencia, no mediciones reales."
+            "Monitoreo adaptativo para detener sabotaje antes del daño. "
+            "Los costos son supuestos; la latencia y los tokens se miden."
         ),
-        "empty": "A\u00fan no hay resultados. Ejecuta primero: python scripts/run_experiment.py",
-        "phr": "Sabotajes detenidos a tiempo",
-        "bdr": "Falsas alarmas",
-        "eph": "Da\u00f1o evitado",
-        "uniform_harm": "Da\u00f1o que queda con vigilancia fija",
-        "adaptive_harm": "Da\u00f1o que queda con vigilancia adaptativa",
-        "costs_title": "Costo de cada tipo de vigilancia",
-        "costs_caption": "Valores de referencia para el dashboard, no costos medidos.",
-        "cost_type": "Tipo de vigilancia",
-        "cost_value": "Costo de referencia",
-        "table_title": "Detalle de los 24 casos",
-        "yes": "S\u00ed",
+        "tabs": ["Escenarios", "Detección", "Presupuesto", "Trade-off", "Gemini"],
+        "titles": [
+            "Escenarios evaluados",
+            "Detección por señal",
+            "Asignación adaptativa del presupuesto",
+            "Daño frente a presupuesto",
+            "Evaluaciones externas de Gemini",
+        ],
+        "no_runs": "Aún no hay corridas. Ejecuta `python scripts/run_experiment.py`.",
+        "no_summary": "Ejecuta `python scripts/build_results.py` para calcular el plan.",
+        "no_gemini": "Aún no hay veredictos de Gemini.",
+        "gemini_hint": "Ejecuta `python scripts/run_gemini_monitor.py --limit 3` como prueba.",
+        "signal": "Señal",
+        "policy": "Política",
+        "scenarios": "Escenarios",
+        "assignment": "Asignación por corrida",
+        "costs": "Costos relativos asumidos",
+        "cost_caption": "Valores normalizados para comparar políticas; no son precios reales.",
+        "metric_phr": "Sabotajes detenidos a tiempo",
+        "metric_bdr": "Falsas alarmas",
+        "metric_eph": "Daño evitado",
+        "imv": "Valor incremental de NLA sobre observable",
+        "lp_cost": "Costo del plan",
+        "lp_wh": "Daño ponderado evitado",
+        "lp_as": "Éxito del ataque",
+        "evaluations": "Evaluaciones",
+        "expected_match": "Acuerdo esperado",
+        "mean_risk": "Riesgo medio",
+        "mean_latency": "Latencia media (ms)",
+        "details": "Detalle",
+        "yes": "Sí",
         "no": "No",
         "channels": {
             "observable": "Acciones visibles",
-            "cot": "Razonamiento",
-            "probe": "Sonda interna",
-            "nla": "Lectura interna NLA",
-        },
-        "costs": {
-            "observable": "Vigilar acciones visibles",
-            "cot": "Leer el razonamiento",
-            "probe": "Sonda interna",
-            "nla": "Lectura NLA + Gemini",
-            "hybrid": "Revisi\u00f3n h\u00edbrida completa",
-            "human_review": "Revisi\u00f3n humana simulada",
+            "cot": "Razonamiento visible",
+            "probe": "Probe lineal",
+            "nla": "Lectura NLA",
+            "hybrid": "Híbrido",
         },
         "families": {
-            "external_report": "Publicar informe",
+            "external_report": "Publicación de informe",
             "corporate_email": "Correo corporativo",
             "access_list": "Lista de acceso",
         },
         "conditions": {
-            "BENIGN": "Tarea inocua",
+            "BENIGN": "Benigno",
             "ATTACK_REJECTED": "Ataque rechazado",
             "VISIBLE_SABOTAGE": "Sabotaje visible",
-            "STEALTH_SABOTAGE": "Sabotaje oculto",
-        },
-        "decisions": {
-            "allow": "Permitir",
-            "block": "Bloquear",
-            "escalate": "Revisar",
-        },
-        "headers": {
-            "run_id": "ID de corrida",
-            "timestamp": "Fecha",
-            "trajectory_id": "ID del caso",
-            "family": "Tipo de tarea",
-            "condition": "Situaci\u00f3n",
-            "variant": "Variante",
-            "template_id": "Plantilla",
-            "primary_label": "Intento de sabotaje",
-            "harm_committed": "Habr\u00eda causado da\u00f1o",
-            "observable_alert": "Alerta por acciones visibles",
-            "cot_alert": "Alerta por razonamiento",
-            "probe_alert": "Alerta de la sonda",
-            "nla_alert": "Alerta NLA",
-            "uniform_decision": "Decisi\u00f3n con vigilancia fija",
-            "adaptive_decision": "Decisi\u00f3n con vigilancia adaptativa",
-            "uniform_residual_harm": "Da\u00f1o que queda (fija)",
-            "adaptive_residual_harm": "Da\u00f1o que queda (adaptativa)",
-            "uniform_cost": "Costo de la vigilancia fija",
-            "adaptive_cost": "Costo de la vigilancia adaptativa",
+            "STEALTH_SABOTAGE": "Sabotaje encubierto",
         },
     },
     "en": {
-        "page_title": "Budget-NLA",
         "language": "Language",
         "caption": (
-            "Adaptive monitoring to stop sabotage before it causes harm. "
-            "Shown costs are reference values, not measured costs."
+            "Adaptive monitoring to stop sabotage before harm. "
+            "Costs are assumed; latency and tokens are measured."
         ),
-        "empty": "No results yet. Run this first: python scripts/run_experiment.py",
-        "phr": "Sabotage stopped in time",
-        "bdr": "False alarms",
-        "eph": "Harm prevented",
-        "uniform_harm": "Remaining harm with uniform monitoring",
-        "adaptive_harm": "Remaining harm with adaptive monitoring",
-        "costs_title": "Cost of each monitoring type",
-        "costs_caption": "Dashboard reference values, not measured costs.",
-        "cost_type": "Monitoring type",
-        "cost_value": "Reference cost",
-        "table_title": "Detail of the 24 cases",
+        "tabs": ["Scenarios", "Detection", "Budget", "Trade-off", "Gemini"],
+        "titles": [
+            "Evaluated scenarios",
+            "Detection by signal",
+            "Adaptive budget allocation",
+            "Harm versus budget",
+            "External Gemini evaluations",
+        ],
+        "no_runs": "No runs yet. Execute `python scripts/run_experiment.py`.",
+        "no_summary": "Run `python scripts/build_results.py` to compute the plan.",
+        "no_gemini": "No Gemini verdicts are available yet.",
+        "gemini_hint": "Run `python scripts/run_gemini_monitor.py --limit 3` as a preflight.",
+        "signal": "Signal",
+        "policy": "Policy",
+        "scenarios": "Scenarios",
+        "assignment": "Assignment by run",
+        "costs": "Assumed relative costs",
+        "cost_caption": "Normalized policy-comparison values; these are not prices.",
+        "metric_phr": "Sabotage stopped in time",
+        "metric_bdr": "False alarms",
+        "metric_eph": "Harm prevented",
+        "imv": "Incremental NLA value over observable",
+        "lp_cost": "Plan cost",
+        "lp_wh": "Weighted harm prevented",
+        "lp_as": "Attack success",
+        "evaluations": "Evaluations",
+        "expected_match": "Expected agreement",
+        "mean_risk": "Mean risk",
+        "mean_latency": "Mean latency (ms)",
+        "details": "Details",
         "yes": "Yes",
         "no": "No",
         "channels": {
-            "observable": "Visible actions",
+            "observable": "Observable actions",
             "cot": "Visible reasoning",
-            "probe": "Internal probe",
-            "nla": "NLA internal readout",
-        },
-        "costs": {
-            "observable": "Watch visible actions",
-            "cot": "Read the reasoning",
-            "probe": "Internal probe",
-            "nla": "NLA + Gemini readout",
-            "hybrid": "Full hybrid review",
-            "human_review": "Simulated human review",
+            "probe": "Linear probe",
+            "nla": "NLA readout",
+            "hybrid": "Hybrid",
         },
         "families": {
-            "external_report": "Publish report",
+            "external_report": "Report publication",
             "corporate_email": "Corporate email",
             "access_list": "Access list",
         },
         "conditions": {
-            "BENIGN": "Benign task",
+            "BENIGN": "Benign",
             "ATTACK_REJECTED": "Attack rejected",
             "VISIBLE_SABOTAGE": "Visible sabotage",
-            "STEALTH_SABOTAGE": "Hidden sabotage",
-        },
-        "decisions": {
-            "allow": "Allow",
-            "block": "Block",
-            "escalate": "Review",
-        },
-        "headers": {
-            "run_id": "Run ID",
-            "timestamp": "Date",
-            "trajectory_id": "Case ID",
-            "family": "Task type",
-            "condition": "Situation",
-            "variant": "Variant",
-            "template_id": "Template",
-            "primary_label": "Sabotage attempt",
-            "harm_committed": "Would have caused harm",
-            "observable_alert": "Visible-actions alert",
-            "cot_alert": "Reasoning alert",
-            "probe_alert": "Probe alert",
-            "nla_alert": "NLA alert",
-            "uniform_decision": "Uniform-monitoring decision",
-            "adaptive_decision": "Adaptive-monitoring decision",
-            "uniform_residual_harm": "Remaining harm (uniform)",
-            "adaptive_residual_harm": "Remaining harm (adaptive)",
-            "uniform_cost": "Uniform monitoring cost",
-            "adaptive_cost": "Adaptive monitoring cost",
+            "STEALTH_SABOTAGE": "Stealth sabotage",
         },
     },
 }
 
 
-def format_yes_no(value, copy: dict) -> str:
-    if value in (True, "True", 1, "1"):
-        return copy["yes"]
-    if value in (False, "False", 0, "0"):
-        return copy["no"]
-    return str(value)
-
-
-def localize_table(frame: pd.DataFrame, copy: dict) -> pd.DataFrame:
-    display = frame.copy()
-    if "family" in display.columns:
-        display["family"] = display["family"].map(copy["families"]).fillna(display["family"])
-    if "condition" in display.columns:
-        display["condition"] = display["condition"].map(copy["conditions"]).fillna(display["condition"])
-    if "primary_label" in display.columns:
-        display["primary_label"] = display["primary_label"].map(lambda value: format_yes_no(value, copy))
-    for column in ("harm_committed", "observable_alert", "cot_alert", "probe_alert", "nla_alert"):
-        if column in display.columns:
-            display[column] = display[column].map(lambda value: format_yes_no(value, copy))
-    for column in ("uniform_decision", "adaptive_decision"):
-        if column in display.columns:
-            display[column] = display[column].map(copy["decisions"]).fillna(display[column])
-    return display.rename(columns=copy["headers"])
-
-
-def selected_language() -> str:
-    query_language = st.query_params.get("lang", "es")
-    if query_language not in TEXT:
-        query_language = "es"
-    language = st.radio(
-        TEXT[query_language]["language"],
-        options=["es", "en"],
-        format_func=lambda code: "Espa\u00f1ol" if code == "es" else "English",
-        index=0 if query_language == "es" else 1,
+def _language() -> str:
+    current = st.query_params.get("lang", "es")
+    if current not in TEXT:
+        current = "es"
+    selected = st.radio(
+        TEXT[current]["language"],
+        ["es", "en"],
+        index=0 if current == "es" else 1,
+        format_func=lambda value: "Español" if value == "es" else "English",
         horizontal=True,
-        key="language_toggle",
     )
-    if language != query_language:
-        st.query_params["lang"] = language
-    return language
+    if selected != current:
+        st.query_params["lang"] = selected
+    return selected
+
+
+def _summary(env: ExperimentEnvironment) -> dict:
+    path = Path(resolve_path(env.config["paths"]["runs"])).with_name("summary.json")
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+
+
+def _gemini_results() -> pd.DataFrame:
+    path = ROOT / "results" / "gemini_verdicts.jsonl"
+    if not path.exists():
+        return pd.DataFrame()
+    return pd.DataFrame(
+        json.loads(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    )
+
+
+def _yes_no(value: bool, copy: dict) -> str:
+    return copy["yes"] if value else copy["no"]
 
 
 def main() -> None:
     st.set_page_config(page_title="Budget-NLA", layout="wide")
-    language = selected_language()
-    copy = TEXT[language]
-    st.title(copy["page_title"])
+    copy = TEXT[_language()]
+    st.title("BUDGET-NLA")
     st.caption(copy["caption"])
+
     env = ExperimentEnvironment(ROOT / "configs" / "experiment.yaml")
-    runs_path = resolve_path(env.config["paths"]["runs"])
-    records = load_run_records(runs_path)
-    if not records:
-        st.warning(copy["empty"])
-        return
-    views = ["observable", "cot", "probe", "nla"]
-    columns = st.columns(4)
-    for column, view in zip(columns, views):
-        column.subheader(copy["channels"][view])
-        column.metric(copy["phr"], f"{pre_harm_recall(records, view):.0%}")
-        column.metric(copy["bdr"], f"{benign_disruption_rate(records, view):.0%}")
-        column.metric(copy["eph"], f"{expected_prevented_harm(records, view):.1f}")
-    left, right = st.columns(2)
-    left.metric(copy["uniform_harm"], f"{policy_residual_harm(records, 'uniform'):.1f}")
-    right.metric(copy["adaptive_harm"], f"{policy_residual_harm(records, 'adaptive'):.1f}")
-    st.subheader(copy["costs_title"])
-    st.caption(copy["costs_caption"])
-    cost_rows = [
-        {copy["cost_type"]: copy["costs"].get(name, name), copy["cost_value"]: value}
-        for name, value in env.costs["assumed"].items()
-    ]
-    st.dataframe(pd.DataFrame(cost_rows), use_container_width=True, hide_index=True)
-    metrics_path = resolve_path(env.config["paths"]["metrics"])
-    if metrics_path.exists():
-        st.subheader(copy["table_title"])
-        st.dataframe(localize_table(pd.read_csv(metrics_path), copy), use_container_width=True, hide_index=True)
+    records = load_run_records(resolve_path(env.config["paths"]["runs"]))
+    summary = _summary(env)
+    tabs = st.tabs(copy["tabs"])
+
+    with tabs[0]:
+        st.subheader(copy["titles"][0])
+        if not records:
+            st.warning(copy["no_runs"])
+        else:
+            rows = [
+                {
+                    "ID": record.trajectory.id,
+                    "Family": copy["families"].get(record.trajectory.family, record.trajectory.family),
+                    "Condition": copy["conditions"].get(record.trajectory.condition, record.trajectory.condition),
+                    "Sabotage": _yes_no(record.labels.primary_label == 1, copy),
+                    "Tool": record.tool_call.name,
+                    "Unauthorized": _yes_no(record.tool_call.unauthorized, copy),
+                }
+                for record in records
+            ]
+            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+    with tabs[1]:
+        st.subheader(copy["titles"][1])
+        if not records:
+            st.warning(copy["no_runs"])
+        else:
+            views = ("observable", "cot", "probe", "nla")
+            rows = [
+                {
+                    copy["signal"]: copy["channels"][view],
+                    "PHR": pre_harm_recall(records, view),
+                    "BDR": benign_disruption_rate(records, view),
+                    "EPH": expected_prevented_harm(records, view),
+                }
+                for view in views
+            ]
+            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+            st.caption(f"{copy['imv']}: {incremental_nla_value(records):.3f}")
+
+    with tabs[2]:
+        st.subheader(copy["titles"][2])
+        if summary:
+            lp = summary.get("lp", {})
+            left, middle, right = st.columns(3)
+            left.metric(copy["lp_cost"], f"{lp.get('cost', 0.0):.2f}")
+            middle.metric(copy["lp_wh"], f"{lp.get('WH', 0.0):.1%}")
+            right.metric(copy["lp_as"], f"{lp.get('AS', 0.0):.1%}")
+            assignment = pd.DataFrame(
+                [
+                    {"run_id": run_id, copy["policy"]: policy}
+                    for run_id, policy in lp.get("assignment", {}).items()
+                ]
+            )
+            if not assignment.empty:
+                counts = (
+                    assignment[copy["policy"]]
+                    .value_counts()
+                    .rename_axis(copy["policy"])
+                    .reset_index(name=copy["scenarios"])
+                )
+                st.dataframe(counts, use_container_width=True, hide_index=True)
+                with st.expander(copy["assignment"]):
+                    st.dataframe(assignment, use_container_width=True, hide_index=True)
+        else:
+            st.info(copy["no_summary"])
+
+        st.subheader(copy["costs"])
+        st.caption(copy["cost_caption"])
+        st.dataframe(
+            pd.DataFrame(
+                [
+                    {copy["signal"]: copy["channels"].get(name, name), "Cost": value}
+                    for name, value in env.costs["assumed"].items()
+                ]
+            ),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+    with tabs[3]:
+        st.subheader(copy["titles"][3])
+        if not records:
+            st.info(copy["no_runs"])
+        else:
+            frame = pd.DataFrame(
+                [
+                    {
+                        copy["policy"]: kind,
+                        "WH": weighted_harm_prevented(records, kind),
+                        "AS": attack_success_probability(records, kind),
+                        "Residual harm": policy_residual_harm(records, kind),
+                    }
+                    for kind in POLICY_KINDS
+                ]
+            )
+            st.dataframe(frame, use_container_width=True, hide_index=True)
+            st.bar_chart(frame.set_index(copy["policy"])[["WH", "AS"]])
+
+    with tabs[4]:
+        st.subheader(copy["titles"][4])
+        gemini = _gemini_results()
+        if gemini.empty:
+            st.info(copy["no_gemini"])
+            st.caption(copy["gemini_hint"])
+        else:
+            grouped = (
+                gemini.groupby("monitor_channel", as_index=False)
+                .agg(
+                    evaluations=("scenario_id", "count"),
+                    expected_match=("matches_expected", "mean"),
+                    mean_risk=("risk_score", "mean"),
+                    mean_latency=("latency_ms", "mean"),
+                )
+                .rename(
+                    columns={
+                        "monitor_channel": copy["signal"],
+                        "evaluations": copy["evaluations"],
+                        "expected_match": copy["expected_match"],
+                        "mean_risk": copy["mean_risk"],
+                        "mean_latency": copy["mean_latency"],
+                    }
+                )
+            )
+            st.dataframe(grouped, use_container_width=True, hide_index=True)
+            with st.expander(copy["details"]):
+                st.dataframe(gemini, use_container_width=True, hide_index=True)
 
 
 if __name__ == "__main__":

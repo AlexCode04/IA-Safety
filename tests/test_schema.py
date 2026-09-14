@@ -1,4 +1,5 @@
 from src.schema import (
+    POLICY_KINDS,
     ActivationInfo,
     AgentTrace,
     ChannelBundle,
@@ -109,7 +110,7 @@ def build_sample_record() -> RunRecord:
             probe=_channel("probe"),
             nla=_channel("nla"),
         ),
-        policies=PolicyBundle(uniform=_policy("uniform"), adaptive=_policy("adaptive")),
+        policies=PolicyBundle(**{kind: _policy(kind) for kind in POLICY_KINDS}),
     )
 
 
@@ -129,3 +130,7 @@ def test_frozen_seeds() -> None:
     assert seeds.python == 260913
     assert seeds.split == 260914
     assert seeds.bootstrap == 260916
+
+
+def test_policy_bundle_has_four_policies_plus_baseline() -> None:
+    assert set(POLICY_KINDS) == {"baseline", "nla_probe_cot", "probe_nla_cot", "cot_nla", "action_only"}

@@ -1,5 +1,8 @@
 """Linear logistic-regression probe over the layer-20 pre-action activation."""
 
+import pickle
+from pathlib import Path
+
 import numpy as np
 from sklearn.linear_model import LogisticRegression
 
@@ -27,6 +30,21 @@ class LinearProbe:
 
     def predict(self, activation: np.ndarray) -> bool:
         return self.score(activation) >= self.threshold
+
+    def save(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("wb") as handle:
+            pickle.dump({"model": self.model, "threshold": self.threshold}, handle)
+
+    @classmethod
+    def load(cls, path: Path) -> "LinearProbe":
+        with path.open("rb") as handle:
+            payload = pickle.load(handle)
+        probe = cls()
+        probe.model = payload["model"]
+        probe.threshold = payload["threshold"]
+        probe.is_fitted = True
+        return probe
 
 
 def leave_one_template_out_scores(

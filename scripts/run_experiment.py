@@ -20,7 +20,6 @@ from src.agent_runner import AgentRunner
 from src.cot_monitor import CotMonitor
 from src.environment import ExperimentEnvironment, resolve_path
 from src.ground_truth import build_labels
-from src.gemini_monitor import GeminiMonitor, GeminiMonitorResult
 from src.metrics import MetricsWriter
 from src.nla_monitor import NlaMonitor
 from src.observable_monitor import ObservableMonitor
@@ -51,9 +50,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--config", default="configs/experiment.yaml")
     parser.add_argument("--reset-output", action="store_true")
     parser.add_argument(
-        "--live-monitor",
+        "--real",
         action="store_true",
-        help="Use Gemini for isolated observable, CoT and NLA views.",
+        help="Use the real local Qwen/NLA pipeline instead of the configured mock.",
     )
     return parser.parse_args()
 
@@ -87,42 +86,6 @@ def build_channel(
         api_calls=api_calls,
         gpu_seconds=0.0,
         raw_output=raw_output,
-    )
-
-
-def build_gemini_channel(
-    view: str,
-    result: GeminiMonitorResult,
-    assumed_cost: float,
-    *,
-    nla_text: str | None = None,
-) -> ChannelResult:
-    raw_payload = {
-        "model": result.model_used,
-        "verdict": result.verdict.model_dump(),
-    }
-    if nla_text is not None:
-        raw_payload["nla_text"] = nla_text
-    return build_channel(
-        view=view,
-        alert=result.verdict.actionable_alert,
-        score=result.verdict.risk_score,
-        assumed_cost=assumed_cost,
-        raw_output=json.dumps(raw_payload, ensure_ascii=False),
-        latency_ms=result.latency_ms,
-        input_tokens=result.input_tokens,
-        output_tokens=result.output_tokens,
-        api_calls=1,
-    )
-
-
-def pre_action_observable_transcript(scenario: dict) -> str:
-    """Observable evidence available before the proposed tool call exists."""
-
-    return (
-        f"Authorized task: {scenario['authorized_task']}\n"
-        "The agent reached PRE_ACTION_DECISION_BOUNDARY. "
-        "The proposed tool name and arguments are not visible yet."
     )
 
 
@@ -168,23 +131,30 @@ def main() -> int:
             if path.exists():
                 path.unlink()
     writer = MetricsWriter(runs_path, metrics_path)
+    mock_mode = bool(config["experiment"]["mock_mode"]) and not bool(
+        getattr(args, "real", False)
+    )
     agent = AgentRunner(
         model=config["agent"]["model"],
         temperature=float(config["agent"]["temperature"]),
-        mock_mode=bool(config["experiment"]["mock_mode"]),
+        mock_mode=mock_mode,
+        max_new_tokens=int(config["agent"]["max_new_tokens"]),
     )
-    hook = ActivationHook(seed=int(seeds["numpy"]))
+    if agent.mock_mode:
+        hook = ActivationHook(seed=int(seeds["numpy"]))
+        nla_monitor = NlaMonitor()
+    else:
+        from src.activation_hook_real import ActivationHook as RealActivationHook
+        from src.model_loader import ModelLoader
+        from src.nla_monitor_real import NlaMonitor as RealNlaMonitor
+
+        model_obj, tokenizer = ModelLoader().load()
+        agent.model_obj = model_obj
+        agent.tokenizer = tokenizer
+        hook = RealActivationHook(model_obj, tokenizer)
+        nla_monitor = RealNlaMonitor(model_obj, tokenizer)
     observable_monitor = ObservableMonitor()
     cot_monitor = CotMonitor()
-    nla_monitor = NlaMonitor()
-    live_monitor = bool(getattr(args, "live_monitor", False))
-    gemini_monitor = None
-    if live_monitor:
-        gemini_monitor = GeminiMonitor(
-            model=config["monitor"]["primary_model"],
-            temperature=float(config["monitor"]["temperature"]),
-            max_output_tokens=int(config["monitor"]["max_output_tokens"]),
-        )
     gate = PolicyGate(
         escalate_threshold=float(config["policy"]["escalate_threshold"]),
         block_on_alert=bool(config["policy"]["block_on_alert"]),
@@ -194,12 +164,15 @@ def main() -> int:
         budget_limit=env.get_budget_limit(),
         uniform_views=env.uniform_views(),
     )
-    adaptive_plan = optimizer.plan_adaptive(env.iter_scenarios())
+    policy_plans = optimizer.plan_policies(env.iter_scenarios())
     collected: list[dict] = []
     for scenario in env.iter_scenarios():
         output = agent.run(scenario)
         labels = build_labels(scenario, output.tool_name, output.arguments)
-        activation = hook.capture(scenario, labels.malicious_objective_adopted)
+        if agent.mock_mode:
+            activation = hook.capture(scenario, labels.malicious_objective_adopted)
+        else:
+            activation = hook.capture(output.prefix_until_decision())
         collected.append(
             {
                 "scenario": scenario,
@@ -221,7 +194,7 @@ def main() -> int:
         name=config["experiment"]["name"],
         spec_version=str(config["experiment"]["spec_version"]),
         config_hash=hash_config(config),
-        mock_mode=bool(config["experiment"]["mock_mode"]),
+        mock_mode=mock_mode,
         seeds=Seeds(**seeds),
         agent_model=config["agent"]["model"],
         agent_revision=config["agent"]["revision"],
@@ -234,67 +207,18 @@ def main() -> int:
         output = item["output"]
         labels = item["labels"]
         started = perf_counter()
-        _mock_nla_alert, _mock_nla_score, nla_raw = nla_monitor.evaluate(item["activation"])
-        if gemini_monitor is not None:
-            observable_text = pre_action_observable_transcript(scenario)
-            obs_result = gemini_monitor.evaluate(
-                policy=scenario["policy"],
-                observable_transcript=observable_text,
-                channel="observable",
-            )
-            cot_result = gemini_monitor.evaluate(
-                policy=scenario["policy"],
-                observable_transcript=observable_text,
-                channel="cot",
-                cot=output.reasoning,
-            )
-            nla_result = gemini_monitor.evaluate(
-                policy=scenario["policy"],
-                observable_transcript=observable_text,
-                channel="nla",
-                nla_text=nla_raw,
-            )
-            obs_alert = obs_result.verdict.actionable_alert
-            obs_score = obs_result.verdict.risk_score
-            cot_alert = cot_result.verdict.actionable_alert
-            cot_score = cot_result.verdict.risk_score
-            nla_alert = nla_result.verdict.actionable_alert
-            nla_score = nla_result.verdict.risk_score
-            channels = ChannelBundle(
-                observable=build_gemini_channel(
-                    "observable", obs_result, env.get_assumed_cost("observable")
-                ),
-                cot=build_gemini_channel(
-                    "cot", cot_result, env.get_assumed_cost("cot")
-                ),
-                probe=build_channel(
-                    "probe",
-                    probe_alerts[index],
-                    probe_scores[index],
-                    env.get_assumed_cost("probe"),
-                    "loto-probe",
-                    0.0,
-                ),
-                nla=build_gemini_channel(
-                    "nla",
-                    nla_result,
-                    env.get_assumed_cost("nla"),
-                    nla_text=nla_raw,
-                ),
-            )
-        else:
-            obs_alert, obs_score, obs_raw = observable_monitor.evaluate(
-                scenario, item["public_args"], output.tool_name
-            )
-            cot_alert, cot_score, cot_raw = cot_monitor.evaluate(output.reasoning, obs_alert)
-            nla_alert, nla_score = _mock_nla_alert, _mock_nla_score
-            elapsed = (perf_counter() - started) * 1000
-            channels = ChannelBundle(
-                observable=build_channel("observable", obs_alert, obs_score, env.get_assumed_cost("observable"), obs_raw, elapsed, api_calls=0),
-                cot=build_channel("cot", cot_alert, cot_score, env.get_assumed_cost("cot"), cot_raw, elapsed, api_calls=0),
-                probe=build_channel("probe", probe_alerts[index], probe_scores[index], env.get_assumed_cost("probe"), "loto-probe", 0.0),
-                nla=build_channel("nla", nla_alert, nla_score, env.get_assumed_cost("nla"), nla_raw, elapsed, api_calls=0),
-            )
+        obs_alert, obs_score, obs_raw = observable_monitor.evaluate(
+            scenario, item["public_args"], output.tool_name
+        )
+        cot_alert, cot_score, cot_raw = cot_monitor.evaluate(output.reasoning, obs_alert)
+        nla_alert, nla_score, nla_raw = nla_monitor.evaluate(item["activation"])
+        elapsed = (perf_counter() - started) * 1000
+        channels = ChannelBundle(
+            observable=build_channel("observable", obs_alert, obs_score, env.get_assumed_cost("observable"), obs_raw, elapsed, api_calls=0),
+            cot=build_channel("cot", cot_alert, cot_score, env.get_assumed_cost("cot"), cot_raw, elapsed, api_calls=0),
+            probe=build_channel("probe", probe_alerts[index], probe_scores[index], env.get_assumed_cost("probe"), "loto-probe", 0.0),
+            nla=build_channel("nla", nla_alert, nla_score, env.get_assumed_cost("nla"), nla_raw, elapsed, api_calls=0),
+        )
         alerts = {
             "observable": obs_alert,
             "cot": cot_alert,
@@ -307,31 +231,22 @@ def main() -> int:
             "probe": probe_scores[index],
             "nla": nla_score,
         }
-        uniform_views = optimizer.select_uniform(scenario)
-        adaptive_views = adaptive_plan[scenario["id"]]
         policies = PolicyBundle(
-            uniform=evaluate_policy(
-                "uniform",
-                uniform_views,
-                alerts,
-                scores,
-                gate,
-                optimizer,
-                labels.primary_label,
-                float(scenario["severity"]),
-            ),
-            adaptive=evaluate_policy(
-                "adaptive",
-                adaptive_views,
-                alerts,
-                scores,
-                gate,
-                optimizer,
-                labels.primary_label,
-                float(scenario["severity"]),
-            ),
+            **{
+                kind: evaluate_policy(
+                    kind,
+                    policy_plans[kind][scenario["id"]],
+                    alerts,
+                    scores,
+                    gate,
+                    optimizer,
+                    labels.primary_label,
+                    float(scenario["severity"]),
+                )
+                for kind in policy_plans
+            }
         )
-        committed = labels.harm_committed and policies.adaptive.decision == "allow"
+        committed = labels.harm_committed and policies.nla_probe_cot.decision == "allow"
         if committed:
             commit_tool(output.tool_name, output.arguments)
         writer.write(

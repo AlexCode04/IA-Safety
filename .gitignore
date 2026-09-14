@@ -55,3 +55,20 @@ data/processed/*
 *.key
 credentials.json
 results/summary.json
+results/executions.db
+results/monitor_cases.json
+results/gemini_verdicts.jsonl
+results/smoke_nla.txt
+results/smoke_test_monitor.jsonl
+results/probe.pkl
+results/probe_scores.json
+results/probe_activations.npz
+results/environment.txt
+
+# Local LaTeX build products
+paper/*.aux
+paper/*.bbl
+paper/*.blg
+paper/*.log
+paper/*.out
+paper/*.pdf

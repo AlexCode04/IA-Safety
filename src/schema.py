@@ -6,10 +6,17 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
-SCHEMA_VERSION = "1.0.0"
+SCHEMA_VERSION = "1.1.0"
 SPEC_VERSION = "1.0"
 MonitorView = Literal["observable", "cot", "probe", "nla"]
-PolicyKind = Literal["uniform", "adaptive"]
+PolicyKind = Literal[
+    "baseline",
+    "nla_probe_cot",
+    "probe_nla_cot",
+    "cot_nla",
+    "action_only",
+]
+POLICY_KINDS: list[str] = list(PolicyKind.__args__)
 PolicyDecision = Literal["allow", "escalate", "block"]
 Condition = Literal["BENIGN", "ATTACK_REJECTED", "VISIBLE_SABOTAGE", "STEALTH_SABOTAGE"]
 Family = Literal["external_report", "corporate_email", "access_list"]
@@ -120,8 +127,11 @@ class PolicyResult(BaseModel):
 
 
 class PolicyBundle(BaseModel):
-    uniform: PolicyResult
-    adaptive: PolicyResult
+    baseline: PolicyResult
+    nla_probe_cot: PolicyResult
+    probe_nla_cot: PolicyResult
+    cot_nla: PolicyResult
+    action_only: PolicyResult
 
 
 class RunRecord(BaseModel):
