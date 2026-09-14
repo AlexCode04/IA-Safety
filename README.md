@@ -102,8 +102,9 @@ streamlit run app/dashboard.py
 
 ## Paper and publication figures
 
-The Overleaf-ready paper lives in `paper/main.tex` with its bibliography in
-`paper/references.bib`. Generate the two methodology figures at any time with:
+The Overleaf-ready paper is bilingual: `paper/main_en.tex` is the English
+version and `paper/main_es.tex` is the Spanish version. Both share
+`paper/generated_results.tex`, `paper/references.bib`, and the same figures. Generate the two methodology figures at any time with:
 
 ```bash
 pip install -r requirements-paper.txt
@@ -111,8 +112,9 @@ python scripts/generate_paper_figures.py
 ```
 
 After a frozen non-mock run, the same command generates the empirical plots and
-LaTeX result macros. It refuses to populate the paper from mock data by default.
-See `paper/README.md` and `paper/RESULTS_CHECKLIST.md` before submission.
+LaTeX result macros. Mock artifacts require the explicit `--allow-mock` flag and are labelled as a
+synthetic demonstration. Real runs require complete Gemini provenance. See
+`paper/README.md` before submission.
 
 `run_gemini_monitor.py` resumes completed scenario/channel/model tuples by
 default. Pass `--overwrite` only when starting a new result set. The real API

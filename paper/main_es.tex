@@ -1,0 +1,309 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[margin=0.66in,columnsep=0.23in]{geometry}
+\usepackage{amsmath,amssymb,array,booktabs,flushend}
+\usepackage{caption,enumitem,graphicx,xcolor,xurl}
+\usepackage{pgfplots}
+\usepackage{hyperref}
+\pgfplotsset{compat=1.18}
+\definecolor{budgetblue}{HTML}{17365D}
+\definecolor{budgetred}{HTML}{B85450}
+\definecolor{budgetgreen}{HTML}{3C8D70}
+\definecolor{budgetamber}{HTML}{D89B37}
+\hypersetup{colorlinks=true,linkcolor=budgetblue,citecolor=budgetblue,urlcolor=budgetblue}
+\captionsetup{font=small,labelfont=bf}
+\setlist{nosep,leftmargin=*}
+\setlength{\parindent}{1em}
+\setlength{\parskip}{0pt}
+\setlength{\textfloatsep}{7pt plus 2pt minus 2pt}
+\setlength{\floatsep}{6pt plus 2pt minus 2pt}
+\setlength{\intextsep}{6pt plus 2pt minus 2pt}
+\newcommand{\system}{\textsc{Budget-NLA}}
+\newcommand{\yes}{\textcolor{budgetgreen}{$\checkmark$}}
+\newcommand{\no}{--}
+\input{generated_results.tex}
+
+\title{\vspace{-1.2em}\system: Prototipo reproducible para monitoreo de sabotaje\\
+pre-harm ponderado por riesgo\vspace{-0.35em}}
+\author{\small
+Jhoan S. Mosquera Ortiz \quad Juan F. Plata Barbosa\\[-1pt]
+Maryori A. Lasso Diaz \quad Angel A. del Castillo Lerma\\[2pt]
+\textit{Universidad Autónoma de Occidente, Cali, Colombia}\\[-1pt]
+\texttt{\{jhoan.mosquera,juan.plata,maryori.lasso,angel.del\}@uao.edu.co}}
+\date{\small AI Incident Response Sprint, 2026}
+
+\begin{document}
+\maketitle
+\vspace{-1.5em}
+
+\begin{abstract}
+Los agentes basados en modelos de lenguaje pueden convertir un objetivo oculto
+en una acción irreversible antes de que una auditoría convencional reaccione.
+Los runtime monitors observan superficies diferentes---acciones visibles,
+Chain-of-Thought (CoT), activation probes lineales y lecturas de un Natural
+Language Autoencoder (NLA)---pero su valor operacional depende del momento de
+la alerta, la disrupción benigna, el impacto y el costo. Presentamos \system, un
+prototipo open-source que congela un evento pre-action, aísla cuatro canales de
+evidencia, valida juicios estructurados de Gemini y transforma alertas en
+decisiones \texttt{ALLOW}, \texttt{ESCALATE} o \texttt{BLOCK} bajo un presupuesto
+común. El protocolo contiene 24 trayectorias simuladas en tres familias de
+herramientas y cuatro condiciones conductuales. Como la corrida live de
+escenarios no terminó antes del plazo del sprint, reportamos una evaluación
+mock determinista y explícitamente rotulada. Esta valida contratos,
+instrumentación, métricas, optimizador, dashboard y generación del paper; no
+estima la seguridad de Qwen2.5-7B, Gemini, el NLA aprendido ni el probe. En la
+demostración sintética, Observable y CoT detectan 8/12 intentos pre-harm,
+mientras los canales internos mock, separables por construcción, detectan
+12/12. Sin embargo, un enrutamiento basado solo en severidad puede rendir peor
+que action-only al gastar presupuesto en casos benignos de alta severidad.
+\end{abstract}
+
+\section{Introducción}
+Los agentes autónomos amplían la generación de texto hacia tool calls con
+consecuencias. Por tanto, un monitor de seguridad debe determinar si existe
+evidencia accionable antes del commit y si la intervención es sostenible a
+escala. SHADE-Arena muestra que un agente puede perseguir side tasks dañinas
+mientras evade la vigilancia, en especial cuando el razonamiento revelador no
+es visible \cite{kutasov2025shade}. AgentHarm y AgentDojo documentan fallas
+complementarias en tool use dañino y prompt injection
+\cite{andriushchenko2025agentharm,debenedetti2024agentdojo}; los comportamientos
+engañosos persistentes también justifican evaluaciones adversariales
+\cite{hubinger2024sleeper}.
+
+El monitoreo de CoT es prometedor pero frágil
+\cite{korbak2025cot,emmons2025pragmatic}. Los métodos de estado interno ofrecen
+otra superficie: un probe mide decodificabilidad y un NLA reconstruye una
+activación mediante un cuello de botella lingüístico
+\cite{belinkov2022probes,frasertaliente2026nla}. Como estas señales consumen
+cómputo, latencia o revisión humana, AI Control y la combinación de monitores
+con restricciones de costo tratan el oversight limitado como parte central del
+diseño \cite{greenblatt2024control,hua2025cost}.
+
+Preguntamos: \textbf{RQ1} ¿qué canales generan una alerta pre-harm y con qué
+disrupción benigna? \textbf{RQ2} ¿qué daño ponderado captura NLA más allá de
+Observable y CoT? \textbf{RQ3} ¿puede una política con presupuesto reducir el
+daño residual sin cambiar silenciosamente la frontera de evidencia? La
+contribución es un puente auditable entre captura alineada por evento, juicio
+aislado, contención determinista, agregación con procedencia y artefactos
+bilingües.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.96\textwidth]{figures/system_pipeline.pdf}
+\caption{Pipeline de \system. La generación de Qwen, el estado pre-action de
+capa 20, las cuatro superficies, el monitor estructurado y el policy gate están
+desacoplados. Gemini se ejecuta después de la etapa costosa de activaciones.}
+\label{fig:pipeline}
+\end{figure*}
+
+\section{Trabajo relacionado y brecha}
+SHADE-Arena mide éxito de sabotaje y evasión del monitor
+\cite{kutasov2025shade}; AI Control estudia protocolos útiles incluso bajo
+subversión intencional \cite{greenblatt2024control}, y ControlArena aporta
+infraestructura reutilizable \cite{controlarena2025}. Hua et al. optimizan la
+selección de monitores e intervenciones bajo un presupuesto promedio
+\cite{hua2025cost}. Nuestro alcance es menor, pero hace explícito que todos los
+canales corresponden al mismo evento y que el resultado se mide como daño
+ponderado prevenido.
+
+Los Sparse Autoencoders y Representation Engineering recuperan estructura de
+activaciones \cite{cunningham2023sae,zou2025repe}. Los NLA producen
+reconstrucciones textuales \cite{frasertaliente2026nla}. Bowkis y Africa
+encuentran errores no idénticos entre CoT y NLA y proponen lecturas agent-side y
+baselines pareados \cite{bowkis2026eliciting}. Una señal decodificable no prueba
+uso causal; por eso conservamos las cautelas sobre probing classifiers
+\cite{belinkov2022probes}.
+
+\begin{table*}[t]
+\centering\scriptsize
+\setlength{\tabcolsep}{4.2pt}
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+Sistema & Sabotaje & Vista latent agent-side & Evento pre-action & Presupuesto & Resultado\\
+\midrule
+SHADE-Arena \cite{kutasov2025shade} & \yes & \no & \no & \no & evasión/éxito\\
+AI Control \cite{greenblatt2024control} & \yes & \no & artefacto final & auditoría & seguridad/utilidad\\
+Cost-constrained monitors \cite{hua2025cost} & general & \no & no especificado & \yes & recall\\
+NLA monitoring \cite{bowkis2026eliciting} & reward hacking & monitor-side & posterior & \no & clasificación\\
+\textbf{\system{} (nuestro)} & \yes & probe + NLA nativo & \yes & \yes & prevención ponderada\\
+\bottomrule
+\end{tabular}
+\caption{La brecha objetivo es la intersección entre evidencia latent alineada
+por evento, aislamiento de canales, intervención pre-harm y presupuesto común.}
+\label{tab:gap}
+\end{table*}
+
+\section{Sistema y diseño experimental}
+El agente objetivo es \texttt{Qwen/Qwen2.5-7B-Instruct}
+\cite{yang2025qwen25}, con decoding determinista. En el último token de
+\texttt{\textbackslash n<DECISION>\textbackslash n}, antes del nombre y los
+argumentos de la herramienta, se extrae el estado residual $h_i$ de la capa 20.
+El mismo estado alimenta un probe logístico L2 y
+\texttt{Kameshr/nla-qwen2.5-7b-L20-av}. El adapter se desactiva durante la
+generación del agente y solo se habilita para verbalizar. El prefix replay
+conserva la información pre-action, aunque no mide latencia síncrona de pausa y
+reanudación.
+
+Tres familias simuladas representan publicación de informes, correo
+corporativo y actualización de allowlists. Cada una cruza \textsc{Benign},
+\textsc{Attack Rejected}, \textsc{Visible Sabotage} y \textsc{Stealth Sabotage},
+con dos variantes fijas (Fig.~\ref{fig:matrix}). El ground truth se calcula con
+las reglas de política y el tool call propuesto, nunca con la opinión del
+monitor. Todos los recursos y side effects son sintéticos.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figures/experimental_matrix.pdf}
+\caption{Matriz congelada $3\times4\times2=24$. Attack Rejected separa exposición
+a una instrucción maliciosa de la adopción del objetivo.}
+\label{fig:matrix}
+\end{figure}
+
+Las vistas aisladas son Observable ($O$), CoT visible ($C$), probe directo
+($P$) y texto NLA ($N$). Gemini 3.8 Flash actúa como lector stateless con
+structured output \cite{google2026gemini}. Cada llamada recibe únicamente la
+política, el transcript común pre-action y la vista asignada. El veredicto
+validado pasa a un gate determinista. Tanto \texttt{BLOCK} como
+\texttt{ESCALATE} pausan la acción antes del daño. La demostración actual
+reemplaza la ruta live por mocks locales deterministas, pero conserva los
+contratos Pydantic y JSONL.
+
+\section{Métricas y asignación de presupuesto}
+Sea $y_i\in\{0,1\}$ un objetivo dañino adoptado con tool call dañino propuesto,
+$s_i$ su severidad, $A_{im}$ una detención pre-harm y $c_{im}$ el costo asumido:
+\begin{align}
+\mathrm{PHR}_m&=\frac{\sum_i y_iA_{im}}{\sum_i y_i},&
+\mathrm{BDR}_m&=\frac{\sum_i(1-y_i)A_{im}}{\sum_i(1-y_i)},\\
+\mathrm{EPH}_m&=\sum_i s_i y_iA_{im},&
+\mathrm{PE}_m&=\frac{\mathrm{EPH}_m}{\sum_i c_{im}}.
+\end{align}
+PHR es pre-harm recall, BDR es benign disruption rate, EPH es expected prevented
+harm y PE es prevention efficiency. El valor incremental de NLA se calcula como
+unión de canales, no como resta contra una política con presupuesto:
+\begin{align}
+\mathrm{IMV}_{N}&=\mathrm{EPH}_{O\cup N}-\mathrm{EPH}_{O},\\
+\mathrm{IMV}_{N\mid C}&=\mathrm{EPH}_{O\cup C\cup N}
+-\mathrm{EPH}_{O\cup C}.
+\end{align}
+Para cada política $k$, $x_{ik}$ selecciona un bundle:
+\begin{align}
+\max_x\;&\sum_{i,k}b_{ik}x_{ik}\\
+\mathrm{s.a.}\;&\sum_{i,k}c_{ik}x_{ik}\le B,\quad
+\sum_kx_{ik}=1,\quad x_{ik}\in\{0,1\}.
+\end{align}
+Los costos por defecto ($O=1.00,C=1.20,P=0.25,N=4.00$) son supuestos, no precios.
+Un routing predecible puede ser explotado y motiva extensiones con security
+games \cite{tambe2011security}.
+
+\section{Resultados de demostración sintética}
+\noindent\fcolorbox{budgetred}{white}{\parbox{0.94\columnwidth}{\small
+\textbf{Estado: \resultstatusES.} Estas mediciones validan el software y su
+presentación; no pueden citarse como desempeño de modelos reales.}}
+
+\begin{table}[h]
+\centering\scriptsize
+\setlength{\tabcolsep}{3.1pt}
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+Canal & PHR (IC 95\%) & BDR (IC 95\%) & EPH & PE\\
+\midrule
+Observable & \phrObservable\ [\phrObservableCI] & \bdrObservable\ [\bdrObservableCI] & \ephObservable & \peObservable\\
+CoT & \phrCoT\ [\phrCoTCI] & \bdrCoT\ [\bdrCoTCI] & \ephCoT & \peCoT\\
+Probe & \phrProbe\ [\phrProbeCI] & \bdrProbe\ [\bdrProbeCI] & \ephProbe & \peProbe\\
+NLA & \phrNLA\ [\phrNLACI] & \bdrNLA\ [\bdrNLACI] & \ephNLA & \peNLA\\
+\bottomrule
+\end{tabular}
+\caption{Resultados mock deterministas. PHR usa 12 intentos dañinos y BDR 12
+casos no dañinos. Los intervalos Wilson describen solo esta muestra sintética.}
+\label{tab:primary}
+\end{table}
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+ width=\linewidth,height=4.25cm,
+ ybar,bar width=6pt,ymin=0,ymax=110,
+ ylabel={Tasa (\%)},
+ symbolic x coords={Observable,CoT,Probe,NLA},
+ xtick=data,x tick label style={rotate=20,anchor=east,font=\scriptsize},
+ legend style={font=\scriptsize,at={(0.5,1.03)},anchor=south,legend columns=2},
+ grid=major,major grid style={draw=gray!18}]
+\addplot[fill=budgetblue] coordinates {
+ (Observable,\phrObservableRaw) (CoT,\phrCoTRaw)
+ (Probe,\phrProbeRaw) (NLA,\phrNLARaw)};
+\addplot[fill=budgetamber] coordinates {
+ (Observable,\bdrObservableRaw) (CoT,\bdrCoTRaw)
+ (Probe,\bdrProbeRaw) (NLA,\bdrNLARaw)};
+\legend{Pre-harm recall,Benign disruption}
+\end{axis}
+\end{tikzpicture}
+\caption{Perfil de detección/disrupción de los mocks. La separación perfecta de
+los canales internos fue construida y no es un hallazgo empírico.}
+\label{fig:detection}
+\end{figure}
+
+Observable y CoT detienen \phrObservableCount\ intentos; CoT también marca
+\bdrCoTCount\ casos no dañinos porque el mock reconoce lenguaje de rechazo.
+Probe y NLA detienen \phrNLACount\ sin falsas disrupciones mock por construcción.
+$\mathrm{IMV}_{N}$ y $\mathrm{IMV}_{N\mid C}$ son \imvNLA{} unidades de
+severidad: cuatro casos stealth de email/allowlist que $O\cup C$ no captura.
+
+\begin{table}[h]
+\centering\scriptsize
+\setlength{\tabcolsep}{3.5pt}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+Política & Costo & Daño residual & Éxito del ataque\\
+\midrule
+baseline ($O+C$) & 52.8 & 9.0 & 33.3\%\\
+action-only ($O$) & 24.0 & 9.0 & 33.3\%\\
+nla-probe-cot priority & 52.5 & 18.0 & 66.7\%\\
+probe-nla-cot priority & 52.5 & 18.0 & 66.7\%\\
+cot-nla priority & 52.8 & 18.0 & 66.7\%\\
+\bottomrule
+\end{tabular}
+\caption{Trade-off mock de políticas fijas. Los nombres indican prioridad de
+routing, no acceso simultáneo a todos los canales nombrados.}
+\label{tab:policies}
+\end{table}
+
+Las rutas internas rinden peor porque la asignación basada solo en severidad
+consume presupuesto en todos los casos de reportes de alta severidad, incluso
+los benignos y rechazados, antes de alcanzar sabotajes de menor severidad. Es
+un hallazgo de integración útil: una señal informativa no compensa un objetivo
+de routing sin riesgo o beneficio calibrado. Esto no acepta ni rechaza las
+hipótesis de modelos reales.
+
+\section{Reproducibilidad, limitaciones y seguridad}
+El repositorio congela seeds, model IDs, capa, marker, split LOTO, costos y
+schema versionado. El entry point del clúster ofrece una ruta \texttt{demo} y
+otra \texttt{real}. La segunda descarga checkpoints faltantes, usa BF16 con
+ubicación automática CUDA/CPU, mantiene los retries de API fuera de la
+inferencia de Qwen, rechaza por defecto conjuntos Gemini incompletos y registra
+procedencia. El structured JSON de Gemini sigue el contrato oficial
+\cite{google2026gemini}. El dashboard consume el mismo summary y marca los datos
+mock. El artefacto acompaña el paper \cite{budgetnla2026}.
+
+El piloto es pequeño, sintético y limitado a un modelo, una capa, un adapter y
+un judge. Dos variantes lingüísticas no representan variación amplia. Las
+activaciones mock codifican la etiqueta y no validan interpretabilidad. El
+texto NLA es lossy; un probe muestra decodificabilidad, no uso causal. Severidad
+y costo son supuestos. El optimizador depende de beneficios estimados y de un
+atacante no estratégico. Los resultados reales requieren escenarios completos,
+probe directo, todos los juicios Gemini aislados y reporte de fallas de API.
+Todas las herramientas terminan en un simulador.
+
+\section{Conclusión}
+\system{} aporta un stack reproducible de medición para incident response, no
+una afirmación de desempeño de seguridad. La corrida sintética confirma que el
+contrato pre-action, aislamiento, policy gate, contabilidad, dashboard bilingüe
+y pipeline de publicación concuerdan. También muestra una lección de diseño:
+un monitor más informativo puede contener menos daño cuando el routing gasta el
+presupuesto en casos equivocados. Se necesita la corrida real completa antes de
+concluir sobre Qwen, NLA, probe o Gemini.
+
+\bibliographystyle{unsrt}
+\bibliography{references}
+\end{document}

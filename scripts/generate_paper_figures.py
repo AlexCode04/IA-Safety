@@ -208,8 +208,20 @@ def _rate(value: float) -> str:
 
 def _number(value: float) -> str:
     if math.isclose(value, round(value), abs_tol=1e-9):
-        return str(int(round(value)))
-    return f"{value:.2f}"
+        return f"{float(value):.1f}"
+    return f"{value:.3f}"
+
+
+def _wilson(successes: int, total: int, z: float = 1.959963984540054) -> tuple[float, float]:
+    if total == 0:
+        return 0.0, 0.0
+    proportion = successes / total
+    denominator = 1.0 + z * z / total
+    center = (proportion + z * z / (2.0 * total)) / denominator
+    half = z * math.sqrt(
+        proportion * (1.0 - proportion) / total + z * z / (4.0 * total * total)
+    ) / denominator
+    return 100.0 * (center - half), 100.0 * (center + half)
 
 
 def write_result_macros(summary: dict, *, mock_mode: bool) -> None:
@@ -219,18 +231,33 @@ def write_result_macros(summary: dict, *, mock_mode: bool) -> None:
         "probe": "Probe",
         "nla": "NLA",
     }
-    status = "MOCK LAYOUT ONLY --- DO NOT SUBMIT" if mock_mode else "Frozen real run"
-    provenance = "mock layout data" if mock_mode else "a non-mock frozen run"
+    if mock_mode:
+        status_en = "Synthetic demonstration (deterministic mock pipeline; not a real-model evaluation)"
+        status_es = "Demostración sintética (pipeline mock determinista; no es una evaluación del modelo real)"
+    else:
+        status_en = "Frozen real run with complete provenance"
+        status_es = "Corrida real congelada con procedencia completa"
+    provenance = summary.get("provenance", {}).get("source", "unknown").replace("_", "\\_")
     lines = [
-        f"% Auto-generated from {provenance}. Do not edit manually.",
-        f"\\newcommand{{\\resultstatus}}{{{status}}}",
+        "% Auto-generated from results/summary.json. Do not edit manually.",
+        f"\\newcommand{{\\resultstatusEN}}{{{status_en}}}",
+        f"\\newcommand{{\\resultstatusES}}{{{status_es}}}",
+        f"\\newcommand{{\\resultsource}}{{{provenance}}}",
     ]
     for key, suffix in labels.items():
         metrics = summary["primary"][key]
+        phr_low, phr_high = _wilson(int(metrics["PHR_n"]), int(metrics["PHR_d"]))
+        bdr_low, bdr_high = _wilson(int(metrics["BDR_n"]), int(metrics["BDR_d"]))
         lines.extend(
             [
                 f"\\newcommand{{\\phr{suffix}}}{{{_rate(metrics['PHR'])}}}",
+                f"\\newcommand{{\\phr{suffix}Raw}}{{{100.0 * metrics['PHR']:.1f}}}",
+                f"\\newcommand{{\\phr{suffix}Count}}{{{metrics['PHR_n']}/{metrics['PHR_d']}}}",
+                f"\\newcommand{{\\phr{suffix}CI}}{{{phr_low:.1f}--{phr_high:.1f}\\%}}",
                 f"\\newcommand{{\\bdr{suffix}}}{{{_rate(metrics['BDR'])}}}",
+                f"\\newcommand{{\\bdr{suffix}Raw}}{{{100.0 * metrics['BDR']:.1f}}}",
+                f"\\newcommand{{\\bdr{suffix}Count}}{{{metrics['BDR_n']}/{metrics['BDR_d']}}}",
+                f"\\newcommand{{\\bdr{suffix}CI}}{{{bdr_low:.1f}--{bdr_high:.1f}\\%}}",
                 f"\\newcommand{{\\eph{suffix}}}{{{_number(metrics['EPH'])}}}",
                 f"\\newcommand{{\\pe{suffix}}}{{{metrics['PE']:.3f}}}",
             ]
@@ -241,7 +268,10 @@ def write_result_macros(summary: dict, *, mock_mode: bool) -> None:
             f"\\newcommand{{\\imvNLAcoT}}{{{_number(summary['incremental']['IMV_NLA_given_CoT'])}}}",
         ]
     )
-    (PAPER_DIR / "generated_results.tex").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    (PAPER_DIR / "generated_results.tex").write_text(
+        "\n".join(lines) + "\n",
+        encoding="utf-8",
+    )
 
 
 def draw_channel_detection(summary: dict) -> None:
