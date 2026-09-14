@@ -36,12 +36,26 @@ Mock mode is the default. No API key is required for the baseline.
 ## Single entry point
 
 ```bash
+# 1) base: generan runs.jsonl, metrics.csv y summary.json (mock por defecto)
 python scripts/run_experiment.py --reset-output
-python scripts/train_probe.py
 python scripts/build_results.py
+
+# 2) probe (fill probe_score en el contrato de senales)
+python scripts/train_probe.py          # persiste probe.pkl, probe_scores.json y activaciones
+python scripts/export_sqlite.py        # vierte runs.jsonl a results/executions.db (SQLite)
+
+# 3) NLA real requerida por el pipeline: solo con maquina >= 18GB
+python -u scripts/smoke_nla.py         # monitor_cases.json con corte <DECISION> (fusiona probe_score)
 pytest
-streamlit run app/dashboard.py
+streamlit run app/dashboard.py         # 4 pestanas: escenarios, deteccion, presupuesto, trade-off
 ```
+
+`train_probe.py` entrena el probe logreg L20 con leave-one-template-out, persiste
+`results/probe.pkl`, `results/probe_scores.json` y `results/probe_activations.npz`, y rellena
+`probe_score` en un `results/monitor_cases.json` preexistente. `smoke_nla.py` lee
+`probe_scores.json` y deja el contrato completo para el monitor de Gemini
+(`feature/gemini-monitor-codex`). El gate `decide_verdict` consume el veredicto estructurado de
+Gemini y esta alineado 1:1 con la rama de Jhoan (`tests/test_policy_gate.py`).
 
 ## Result schema
 
