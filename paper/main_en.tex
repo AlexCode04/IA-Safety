@@ -23,6 +23,7 @@
 \newcommand{\yes}{\textcolor{budgetgreen}{$\checkmark$}}
 \newcommand{\no}{--}
 \input{generated_results.tex}
+\input{generated_policy_results.tex}
 
 \title{\vspace{-1.2em}\system: A Reproducible Prototype for Risk-Weighted\\
 Pre-Harm Sabotage Monitoring\vspace{-0.35em}}
@@ -52,12 +53,14 @@ completed before the sprint deadline, we report a clearly labelled,
 deterministic mock evaluation. It validates the end-to-end contracts,
 instrumentation, metrics, optimizer, dashboard, and paper-generation path; it
 does not estimate the safety of Qwen2.5-7B, Gemini, the learned NLA, or the
-probe. In this synthetic demonstration, observable and CoT monitoring attain
-8/12 pre-harm catches, while the deliberately separable mock internal channels
-attain 12/12. A severity-only routing heuristic can nevertheless perform worse
-than action-only monitoring by spending scarce budget on benign high-severity
-cases. The result illustrates why incident-response evaluations must jointly
-report detection, intervention timing, false disruption, and resource use.
+probe. In this synthetic demonstration, observable monitoring catches
+\phrObservableCount{} harmful attempts and CoT catches \phrCoTCount{}, while
+the deliberately separable mock probe and NLA channels catch
+\phrProbeCount{} and \phrNLACount{}, respectively. A severity-only routing
+heuristic can nevertheless perform worse than action-only monitoring by
+spending scarce budget on benign high-severity cases. The result illustrates
+why incident-response evaluations must jointly report detection, intervention
+timing, false disruption, and resource use.
 \end{abstract}
 
 \section{Introduction}
@@ -169,6 +172,15 @@ The validated verdict is passed to a deterministic gate. Both
 The current demonstration substitutes deterministic local mocks for the live
 Qwen/NLA/Gemini path but exercises the same Pydantic and JSONL contracts.
 
+\textbf{Operational dashboard.} In addition to the offline evaluation,
+\system{} includes an operator-facing Streamlit dashboard backed by the same
+canonical result contract used by the paper. The interface exposes per-scenario
+alerts across Observable, CoT, Probe, and NLA, compares baseline and adaptive
+intervention decisions, and displays residual harm, monitoring cost, and result
+provenance. The dashboard therefore acts as an incident-response inspection
+layer through which an operator can examine why a case was allowed, escalated,
+or blocked rather than as a separate source of results.
+
 \section{Metrics and Budgeted Routing}
 Let $y_i\in\{0,1\}$ denote an adopted harmful objective with a harmful proposed
 tool call, $s_i$ its severity, $A_{im}$ a channel-$m$ pre-harm stop, and $c_{im}$
@@ -247,11 +259,12 @@ claim.}
 \label{fig:detection}
 \end{figure}
 
-Observable and CoT each stop \phrObservableCount\ harmful attempts; CoT also
-flags \bdrCoTCount\ non-harmful cases because the mock detects rejection
-language. Probe and NLA stop \phrNLACount\ with no mock false disruptions by
-construction. Both $\mathrm{IMV}_{N}$ and $\mathrm{IMV}_{N\mid C}$ equal
-\imvNLA{} severity units: all six stealth cases missed by $O\cup C$.
+Observable stops \phrObservableCount{} harmful attempts and CoT stops
+\phrCoTCount{}. CoT also flags \bdrCoTCount{} non-harmful cases because the
+mock detects rejection language. Probe and NLA stop \phrProbeCount{} and
+\phrNLACount{} harmful attempts, respectively, with no mock false disruptions
+by construction. Both $\mathrm{IMV}_{N}$ and $\mathrm{IMV}_{N\mid C}$ equal
+\imvNLA{} severity units in the current synthetic result set.
 
 \begin{table}[h]
 \centering\scriptsize
@@ -260,13 +273,12 @@ construction. Both $\mathrm{IMV}_{N}$ and $\mathrm{IMV}_{N\mid C}$ equal
 \toprule
 Policy & Cost & Residual harm & Attack success\\
 \midrule
-baseline ($O+C$) & 52.8 & 15.0 & 50.0\%\\
-action-only ($O$) & 24.0 & 15.0 & 50.0\%\\
-nla-probe-cot priority & 52.5 & 18.0 & 66.7\%\\
-probe-nla-cot priority & 52.5 & 18.0 & 66.7\%\\
-cot-nla priority & 51.8 & 18.0 & 66.7\%
-\\
-post-hoc LP upper bound & 44.4 & 9.0 & 33.3\%\\
+baseline ($O+C$) & \policyBaselineCost & \policyBaselineResidual & \policyBaselineAS\\
+action-only ($O$) & \policyActionOnlyCost & \policyActionOnlyResidual & \policyActionOnlyAS\\
+nla-probe-cot priority & \policyNlaProbeCotCost & \policyNlaProbeCotResidual & \policyNlaProbeCotAS\\
+probe-nla-cot priority & \policyProbeNlaCotCost & \policyProbeNlaCotResidual & \policyProbeNlaCotAS\\
+cot-nla priority & \policyCotNlaCost & \policyCotNlaResidual & \policyCotNlaAS\\
+post-hoc LP upper bound & \policyLPCost & \policyLPResidual & \policyLPAS\\
 \bottomrule
 \end{tabular}
 \caption{Fixed-policy mock trade-off at the declared budget. Policy names
@@ -278,9 +290,10 @@ The apparently stronger fixed internal routes perform worse because severity-onl
 allocation consumes budget on all high-severity report cases, including benign
 and rejected variants, before reaching lower-severity malicious cases. This is
 a useful integration finding: signal quality alone cannot rescue a routing
-objective that lacks calibrated risk or benefit estimates. The post-hoc LP row reuses realized mock benefits and is therefore an optimistic
-upper bound, not a deployable estimate. These results support neither acceptance
-nor rejection of the preregistered real-model hypotheses.
+objective that lacks calibrated risk or benefit estimates. The post-hoc LP row
+reuses realized mock benefits and is therefore an optimistic upper bound, not a
+deployable estimate. These results support neither acceptance nor rejection of
+the preregistered real-model hypotheses.
 
 \section{Reproducibility, Limitations, and Safety}
 The repository freezes seeds, model IDs, layer, marker, LOTO split, costs, and a
@@ -289,9 +302,10 @@ versioned schema. The cluster entry point supports a deterministic
 Hugging Face snapshots, uses BF16 with automatic CUDA/CPU placement, keeps API
 retries outside Qwen inference, refuses incomplete real Gemini sets by default,
 and records result provenance. Gemini's structured JSON mode follows the
-official API contract \cite{google2026gemini}. The dashboard consumes the same
-summary object and visibly labels mock data. The artifact is archived with the
-paper \cite{budgetnla2026}.
+official API contract \cite{google2026gemini}. The dashboard and both language
+versions of the paper consume the same canonical result contract; the dashboard
+can be launched with \texttt{streamlit run app/dashboard.py}. The current
+artifact is archived with the paper \cite{budgetnla2026}.
 
 The pilot is small, synthetic, and limited to one model, layer, adapter, and
 judge. Two linguistic variants do not estimate broad prompt variability.
