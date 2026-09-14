@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Budget-NLA</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet" />
+    <style>/*__CSS__*/</style>
+  </head>
+  <body>
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">BN</div>
+        <div>
+          <h1>Budget-NLA</h1>
+          <p id="brandTag">Pre-harm containment</p>
+        </div>
+      </div>
+      <div class="side-label" data-i18n="language"></div>
+      <div class="seg" id="langSeg">
+        <button type="button" data-lang="es">ES</button>
+        <button type="button" data-lang="en">EN</button>
+      </div>
+      <div class="side-label" data-i18n="theme"></div>
+      <div class="seg" id="themeSeg">
+        <button type="button" data-theme-btn="light" data-i18n="light"></button>
+        <button type="button" data-theme-btn="dark" data-i18n="dark"></button>
+      </div>
+      <div class="side-label" data-i18n="channels"></div>
+      <div class="checks" id="channelFilters"></div>
+      <div class="side-label" data-i18n="families"></div>
+      <div class="checks" id="familyFilters"></div>
+      <div class="side-label" data-i18n="conditions"></div>
+      <div class="checks" id="conditionFilters"></div>
+    </aside>
+    <main class="main">
+      <section class="hero">
+        <div>
+          <h2 id="heroTitle"></h2>
+          <p id="heroCaption"></p>
+        </div>
+      </section>
+      <section class="kpis" id="kpis"></section>
+      <section class="grid-2">
+        <article class="card" style="animation-delay: 0.32s">
+          <h3 class="chart-title" data-i18n="phrBdrTitle"></h3>
+          <div class="chart-wrap"><canvas id="phrChart"></canvas></div>
+        </article>
+        <article class="card" style="animation-delay: 0.38s">
+          <h3 class="chart-title" data-i18n="ephTitle"></h3>
+          <div class="chart-wrap"><canvas id="ephChart"></canvas></div>
+        </article>
+      </section>
+      <section class="grid-policy">
+        <article class="card" style="animation-delay: 0.44s">
+          <h3 class="chart-title" data-i18n="policyTitle"></h3>
+          <div class="chart-wrap"><canvas id="policyChart"></canvas></div>
+        </article>
+        <article class="card" style="animation-delay: 0.5s">
+          <h3 class="chart-title" data-i18n="policyCompare"></h3>
+          <div class="policy-row" id="policyCards"></div>
+        </article>
+      </section>
+      <section class="card" style="animation-delay: 0.56s">
+        <div class="table-head">
+          <h3 class="chart-title" data-i18n="tableTitle"></h3>
+          <div class="table-tools">
+            <input id="caseSearch" type="search" autocomplete="off" />
+            <select id="pageSize">
+              <option value="8">8</option>
+              <option value="12" selected>12</option>
+              <option value="24">24</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-wrap" id="tableWrap"></div>
+        <div class="pager" id="pager"></div>
+      </section>
+    </main>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script>window.DASHBOARD_DATA = __DATA__;</script>
+    <script>/*__JS__*/</script>
+  </body>
+</html>
