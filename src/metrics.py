@@ -70,9 +70,18 @@ def incremental_nla_value(records: list[RunRecord]) -> float:
 
 
 def incremental_nla_given_cot(records: list[RunRecord]) -> float:
-    hybrid = sum(record.policies.cot_nla.prevented_harm for record in records)
+    """Unique NLA harm caught beyond the observable+CoT union.
+
+    This is a channel contrast, not a budget-policy contrast. Mixing the
+    budgeted cot_nla policy into this metric can make the incremental value
+    negative solely because the allocator skipped cases.
+    """
+
+    observable_cot_nla = expected_prevented_harm_union(
+        records, ["observable", "cot", "nla"]
+    )
     observable_cot = expected_prevented_harm_union(records, ["observable", "cot"])
-    return hybrid - observable_cot
+    return observable_cot_nla - observable_cot
 
 
 def expected_prevented_harm_union(records: list[RunRecord], views: list[str]) -> float:

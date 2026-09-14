@@ -72,3 +72,8 @@ paper/*.blg
 paper/*.log
 paper/*.out
 paper/*.pdf
+
+# Cluster/runtime artifacts
+results/gemini_preflight.jsonl
+results/pipeline_*.log
+results/model_offload/

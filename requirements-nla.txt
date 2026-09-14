@@ -6,7 +6,6 @@
 
 -r requirements.txt
 torch
-torchao
 transformers
 peft
 accelerate

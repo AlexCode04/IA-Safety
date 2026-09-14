@@ -1,38 +1,72 @@
-# BUDGET-NLA en cluster (una GPU de varias)
+# BUDGET-NLA en un nodo de 64 GB
 
-El proyecto corre en **una sola GPU** a elección, en un cluster Linux con
-8×64 GB. No requiere configuración manual: el script crea el entorno,
-prepara `.env` y ejecuta toda la cadena (modelo live, NLA, Gemini,
-resultados y figuras del paper).
+El repositorio ofrece dos rutas separadas y claramente rotuladas:
+
+- `demo`: genera 24 trayectorias deterministas con monitores mock. Sirve para
+  validar el contrato, el dashboard, las tablas y la maquetación del paper. No
+  constituye evidencia de seguridad de Qwen, NLA o Gemini.
+- `real`: carga Qwen2.5-7B, captura la activación de la capa 20, ejecuta el
+  adaptador NLA, el probe LOTO y los 96 juicios aislados de Gemini.
 
 ## Requisitos
-- Linux con `python3` (3.10+) y una GPU NVIDIA con **≥16 GB VRAM** (bf16).
-- Internet para bajar Qwen (HuggingFace) y la API de Gemini.
-- (Los 64 GB de RAM de la VM sobran; el modelo cabe en GPU.)
 
-## Uso
+- Linux y Python 3.10 o posterior.
+- Para `demo`: CPU y aproximadamente 4 GB de RAM.
+- Para `real` con GPU: NVIDIA con CUDA; 20 GB de VRAM o más es lo
+  recomendable. Si la VRAM es menor, `accelerate` puede descargar capas a RAM.
+- Para `real` sin GPU: el cargador BF16 cabe en un nodo de 64 GiB de RAM,
+  pero la generación puede ser lenta.
+- Internet para descargar los checkpoints de Hugging Face y llamar a Gemini.
+- `GEMINI_API_KEY` para la ruta real. Nunca se guarda ni se sube al repo.
+
+## Entrega inmediata con datos sintéticos
 
 ```bash
-git clone -b integration/nla-gemini-postrun https://github.com/AlexCode04/IA-Safety.git
+git clone -b integration/bilingual-mock-delivery https://github.com/AlexCode04/IA-Safety.git
 cd IA-Safety
-bash scripts/run_pipeline_gpu.sh <gpu>
+bash scripts/run_pipeline_gpu.sh demo
+streamlit run app/dashboard.py
 ```
 
-- `<gpu>` es el índice de la GPU a usar (0..7), según `nvidia-smi -L`.
-- La primera vez pide la `GEMINI_API_KEY` (se guarda en `.env`, que NO se
-  commitea). También puede pre-escribirse en `.env` antes de correr.
+La interfaz conserva el dashboard actual y muestra una advertencia visible de
+“demostración sintética/mock”. Las dos versiones del artículo quedan en
+`paper/main_en.tex` y `paper/main_es.tex`.
 
-## Qué hace el script (6 pasos, ~40 min en GPU)
-1. `run_experiment.py --real` (24 trayectorias live + activaciones capa 20)
-2. `export_monitor_cases.py`
-3. preflight Gemini (3 casos) y verificado completo (96 llamadas)
-4. `build_results.py` → `results/summary.json`
-5. `generate_paper_figures.py` → `paper/generated_results.tex`
+## Corrida real en el clúster
 
-Log completo en `results/pipeline_gpu.log`. Reanudable: cada paso es
-idempotente (Gemini continúa donde quedó; los pasos 2–6 reutilizan salidas
-previas si existen).
+```bash
+bash scripts/run_pipeline_gpu.sh real auto
+```
 
-## Salidas entregables
-- `results/summary.json`, `results/metrics.csv`, `results/runs.jsonl`
-- `paper/generated_results.tex` (macros empíricas reales del paper)
+También se puede fijar una GPU:
+
+```bash
+bash scripts/run_pipeline_gpu.sh real 0
+```
+
+Por compatibilidad, `bash scripts/run_pipeline_gpu.sh 0` equivale a
+`real 0`.
+
+El script:
+
+1. comprueba GPU o al menos 45 GiB de RAM disponible para CPU;
+2. instala dependencias en `.venv`;
+3. ejecuta Qwen, el corte preacción, NLA y probe;
+4. exporta `results/monitor_cases.json`;
+5. hace un preflight Gemini separado y luego continúa las llamadas pendientes;
+6. rehace las métricas usando los veredictos Gemini para Observable, CoT y NLA;
+7. genera figuras y compila ambos documentos si LaTeX está instalado;
+8. corre la suite de pruebas.
+
+## Salidas
+
+- `results/runs.jsonl`: trayectorias canónicas.
+- `results/gemini_verdicts.jsonl`: juicios externos reanudables.
+- `results/summary.json`: métricas, procedencia y alertas efectivas.
+- `paper/generated_results.tex`: macros compartidas por ambos idiomas.
+- `paper/main_en.pdf` y `paper/main_es.pdf` cuando existe LaTeX.
+- `results/pipeline_demo.log` o `results/pipeline_real.log`.
+
+El agregador bloquea por defecto una corrida real incompleta: no permite que el
+paper use silenciosamente el `alert=False` provisional del NLA antes de
+que Gemini evalúe su verbalización.

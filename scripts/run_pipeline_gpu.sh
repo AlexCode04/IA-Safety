@@ -1,114 +1,124 @@
 #!/usr/bin/env bash
-# Pipeline BUDGET-NLA completo en una GPU del cluster.
-# Uso:  bash scripts/run_pipeline_gpu.sh <gpu-index>
-#  <gpu-index> = índice de la GPU (0..N-1) según `nvidia-smi -L`.
-#
-# Ejecuta en orden: run_experiment (live real) -> export casos ->
-# preflight Gemini -> Gemini full -> build_results -> paper figures.
-# Incluye el setup de entorno (.venv, deps) y crea .env si hace falta.
+# Reproducible BUDGET-NLA pipeline for a 64 GiB cluster node.
+# Usage:
+#   bash scripts/run_pipeline_gpu.sh demo
+#   bash scripts/run_pipeline_gpu.sh real [gpu-index|auto]
+# Backward compatible: bash scripts/run_pipeline_gpu.sh 0
 
 set -euo pipefail
-
 export PYTHONUNBUFFERED=1
+export TOKENIZERS_PARALLELISM=false
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-GPU_ID="${1:-}"
-if [[ -z "$GPU_ID" ]]; then
-    echo "Uso: bash scripts/run_pipeline_gpu.sh <gpu-index>"
-    echo "  <gpu-index> = índice de la GPU a usar (ver 'nvidia-smi -L')."
+FIRST="${1:-demo}"
+if [[ "$FIRST" =~ ^[0-9]+$ ]]; then
+    MODE="real"
+    GPU_ID="$FIRST"
+else
+    MODE="$FIRST"
+    GPU_ID="${2:-auto}"
+fi
+if [[ "$MODE" != "demo" && "$MODE" != "real" ]]; then
+    echo "Usage: bash scripts/run_pipeline_gpu.sh [demo|real] [gpu-index|auto]"
     exit 2
 fi
 
-if ! command -v nvidia-smi >/dev/null 2>&1; then
-    echo "ERROR: nvidia-smi no encontrado. ¿Este nodo tiene GPU NVIDIA?"
-    exit 1
-fi
-
-if ! nvidia-smi -L | grep -qE "^GPU ${GPU_ID}:"; then
-    echo "ERROR: GPU index ${GPU_ID} no existe. GPUs disponibles:"
-    nvidia-smi -L
-    exit 1
-fi
-
-export CUDA_VISIBLE_DEVICES="$GPU_ID"
-GPU_NAME="$(nvidia-smi --id="$GPU_ID" --query-gpu=name --format=csv,noheader | head -1)"
-echo "==== Usando GPU ${GPU_ID}: ${GPU_NAME} (CUDA_VISIBLE_DEVICES=${GPU_ID}) ===="
-
-ENV_FILE=".env"
-if [[ ! -f "$ENV_FILE" ]]; then
-    if [[ ! -f ".env.example" ]]; then
-        echo "ERROR: falta .env.example. ¿El repo está incompleto?"
-        exit 1
+if [[ "$MODE" == "real" ]]; then
+    if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then
+        if [[ "$GPU_ID" == "auto" ]]; then GPU_ID="0"; fi
+        if ! nvidia-smi -L | grep -qE "^GPU ${GPU_ID}:"; then
+            echo "ERROR: GPU $GPU_ID does not exist."
+            nvidia-smi -L
+            exit 1
+        fi
+        export CUDA_VISIBLE_DEVICES="$GPU_ID"
+        export BUDGET_NLA_DEVICE=cuda
+        nvidia-smi --id="$GPU_ID" --query-gpu=name,memory.total --format=csv,noheader
+    else
+        export BUDGET_NLA_DEVICE=cpu
+        AVAILABLE_KIB="$(awk '/MemAvailable/ {print $2}' /proc/meminfo)"
+        if (( AVAILABLE_KIB < 45 * 1024 * 1024 )); then
+            echo "ERROR: CPU mode needs about 45 GiB available RAM; use a GPU node."
+            exit 1
+        fi
+        echo "WARNING: CPU-only real mode fits a 64 GiB RAM node but can be slow."
     fi
-    cp .env.example "$ENV_FILE"
-    echo "Creado .env desde .env.example"
 fi
 
-# Asegurar el modo real: MOCK_MODE=false en runtime (run_experiment usa --real, pero los
-# artefactos de Gemini/paper leen esta variable).
-sed -i 's/^MOCK_MODE=.*/MOCK_MODE=false/' "$ENV_FILE"
-
-# Si no hay API key, pedirla una vez (no se commitea a git).
-if ! grep -qE '^GEMINI_API_KEY=.+' "$ENV_FILE"; then
-    echo "Falta GEMINI_API_KEY en ${ENV_FILE}."
-    echo -n "Pegá la API key y presioná Enter: "
-    read -r -s _KEY
-    echo
-    if [[ -z "$_KEY" ]]; then
-        echo "ERROR: no se ingresó API key."
-        exit 1
-    fi
-    sed -i "s/^GEMINI_API_KEY=.*/GEMINI_API_KEY=${_KEY}/" "$ENV_FILE"
-    unset _KEY
-fi
-
-if [[ ! -d ".venv" ]]; then
-    echo "==== Creando entorno virtual .venv ===="
-    python3 -m venv .venv
-fi
+if [[ ! -d ".venv" ]]; then python3 -m venv .venv; fi
 # shellcheck disable=SC1091
 source .venv/bin/activate
+python -m pip install --upgrade pip
+if [[ "$MODE" == "real" ]]; then
+    python -m pip install -r requirements-nla.txt -r requirements-paper.txt
+else
+    python -m pip install -r requirements.txt -r requirements-paper.txt
+fi
 
-echo "==== Instalando dependencias ===="
-pip install --upgrade pip >/dev/null
-pip install -r requirements-nla.txt -r requirements-paper.txt
-
-RESULTS_DIR="results"
-mkdir -p "$RESULTS_DIR"
-LOGFILE="$RESULTS_DIR/pipeline_gpu.log"
-echo "==== Log: $LOGFILE ===="
+mkdir -p results
+LOGFILE="results/pipeline_${MODE}.log"
 
 run_step() {
     local label="$1"
     shift
-    echo
-    echo "##############################"
-    echo "#### $label"
-    echo "##############################"
+    echo "==== $label ====" | tee -a "$LOGFILE"
     "$@" 2>&1 | tee -a "$LOGFILE"
 }
 
-run_step "[1/6] run_experiment --real (live, trae 24 trayectorias + activaciones)" \
-    python scripts/run_experiment.py --real --reset-output
+if [[ "$MODE" == "demo" ]]; then
+    run_step "[1/4] deterministic mock trajectories" \
+        python scripts/run_experiment.py --reset-output
+    run_step "[2/4] aggregate synthetic results" \
+        python scripts/build_results.py
+    run_step "[3/4] figures and bilingual result macros" \
+        python scripts/generate_paper_figures.py --allow-mock
+else
+    if [[ ! -f ".env" ]]; then cp .env.example .env; fi
+    if [[ -z "${GEMINI_API_KEY:-}" ]] && ! grep -qE '^GEMINI_API_KEY=.+$' .env; then
+        read -r -s -p "GEMINI_API_KEY (not saved by this script): " GEMINI_API_KEY
+        echo
+        if [[ -z "$GEMINI_API_KEY" ]]; then
+            echo "ERROR: GEMINI_API_KEY is required for real mode."
+            exit 1
+        fi
+        export GEMINI_API_KEY
+    fi
+    run_step "[1/6] real Qwen + activation + NLA + probe" \
+        python scripts/run_experiment.py --real --reset-output
+    run_step "[2/6] frozen hand-off contract" \
+        python scripts/export_monitor_cases.py
+    run_step "[3/6] Gemini preflight (separate output)" \
+        python scripts/run_gemini_monitor.py \
+          --limit 3 --output results/gemini_preflight.jsonl
+    run_step "[4/6] complete resumable Gemini evaluation" \
+        python scripts/run_gemini_monitor.py
+    run_step "[5/6] Gemini-integrated metrics" \
+        python scripts/build_results.py
+    run_step "[6/6] figures and bilingual result macros" \
+        python scripts/generate_paper_figures.py
+fi
 
-run_step "[2/6] export_monitor_cases (crea casos para Gemini)" \
-    python scripts/export_monitor_cases.py
+run_step "[4/4] unit tests" python -m pytest -q
 
-run_step "[3/6] Gemini preflight (limit 3, verifica API key)" \
-    python scripts/run_gemini_monitor.py --limit 3 --overwrite
+if command -v pdflatex >/dev/null 2>&1 && command -v bibtex >/dev/null 2>&1; then
+    (
+      cd paper
+      for DOC in main_en main_es; do
+        pdflatex -interaction=nonstopmode -halt-on-error "${DOC}.tex"
+        bibtex "$DOC"
+        pdflatex -interaction=nonstopmode -halt-on-error "${DOC}.tex"
+        pdflatex -interaction=nonstopmode -halt-on-error "${DOC}.tex"
+      done
+    ) | tee -a "$LOGFILE"
+else
+    echo "LaTeX not installed; upload paper/ to Overleaf to compile both versions." | tee -a "$LOGFILE"
+fi
 
-run_step "[4/6] Gemini full (96 veredictos)" \
-    python scripts/run_gemini_monitor.py --overwrite
-
-run_step "[5/6] build_results (summary.json)" \
-    python scripts/build_results.py
-
-run_step "[6/6] generate_paper_figures (macros LaTeX reales)" \
-    python scripts/generate_paper_figures.py
-
-echo
-echo "==== Pipeline completo ====="
-echo "Resultados:  results/metrics.csv, results/runs.jsonl, results/summary.json"
-echo "Macros:      paper/generated_results.tex (empírico real)"
-echo "Log:         $LOGFILE"
+echo "==== Complete ($MODE) ===="
+echo "Dashboard: streamlit run app/dashboard.py"
+echo "English:   paper/main_en.tex"
+echo "Spanish:   paper/main_es.tex"
+echo "Log:       $LOGFILE"
