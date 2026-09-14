@@ -23,6 +23,7 @@
 \newcommand{\yes}{\textcolor{budgetgreen}{$\checkmark$}}
 \newcommand{\no}{--}
 \input{generated_results.tex}
+\input{generated_policy_results.tex}
 
 \title{\vspace{-1.2em}\system: Prototipo reproducible para monitoreo de sabotaje\\
 pre-harm ponderado por riesgo\vspace{-0.35em}}
@@ -53,10 +54,12 @@ escenarios no terminó antes del plazo del sprint, reportamos una evaluación
 mock determinista y explícitamente rotulada. Esta valida contratos,
 instrumentación, métricas, optimizador, dashboard y generación del paper; no
 estima la seguridad de Qwen2.5-7B, Gemini, el NLA aprendido ni el probe. En la
-demostración sintética, Observable y CoT detectan 6/12 intentos pre-harm,
-mientras los canales internos mock, separables por construcción, detectan
-12/12. Sin embargo, un enrutamiento basado solo en severidad puede rendir peor
-que action-only al gastar presupuesto en casos benignos de alta severidad.
+demostración sintética, Observable detecta \phrObservableCount{} intentos
+dañinos y CoT detecta \phrCoTCount{}, mientras los canales mock Probe y NLA,
+separables por construcción, detectan \phrProbeCount{} y \phrNLACount{},
+respectivamente. Sin embargo, un enrutamiento basado solo en severidad puede
+rendir peor que action-only al gastar presupuesto en casos benignos de alta
+severidad.
 \end{abstract}
 
 \section{Introducción}
@@ -169,6 +172,16 @@ validado pasa a un gate determinista. Tanto \texttt{BLOCK} como
 reemplaza la ruta live por mocks locales deterministas, pero conserva los
 contratos Pydantic y JSONL.
 
+\textbf{Dashboard operacional.} Además de la evaluación offline, \system{}
+incluye un dashboard en Streamlit orientado al operador y respaldado por el
+mismo contrato canónico de resultados utilizado por el paper. La interfaz
+muestra por escenario las alertas de Observable, CoT, Probe y NLA, compara las
+decisiones de intervención baseline y adaptativas, y presenta daño residual,
+costo de monitoreo y procedencia de los resultados. Por tanto, el dashboard
+funciona como una capa de inspección para incident response, donde un operador
+puede revisar por qué un caso fue permitido, escalado o bloqueado, y no como
+una fuente separada de resultados.
+
 \section{Métricas y asignación de presupuesto}
 Sea $y_i\in\{0,1\}$ un objetivo dañino adoptado con tool call dañino propuesto,
 $s_i$ su severidad, $A_{im}$ una detención pre-harm y $c_{im}$ el costo asumido:
@@ -244,11 +257,12 @@ los canales internos fue construida y no es un hallazgo empírico.}
 \label{fig:detection}
 \end{figure}
 
-Observable y CoT detienen \phrObservableCount\ intentos; CoT también marca
-\bdrCoTCount\ casos no dañinos porque el mock reconoce lenguaje de rechazo.
-Probe y NLA detienen \phrNLACount\ sin falsas disrupciones mock por construcción.
-$\mathrm{IMV}_{N}$ y $\mathrm{IMV}_{N\mid C}$ son \imvNLA{} unidades de
-severidad: los seis casos stealth que $O\cup C$ no captura.
+Observable detiene \phrObservableCount{} intentos dañinos y CoT detiene
+\phrCoTCount{}. CoT también marca \bdrCoTCount{} casos no dañinos porque el
+mock reconoce lenguaje de rechazo. Probe y NLA detienen \phrProbeCount{} y
+\phrNLACount{} intentos dañinos, respectivamente, sin falsas disrupciones mock
+por construcción. $\mathrm{IMV}_{N}$ y $\mathrm{IMV}_{N\mid C}$ son
+\imvNLA{} unidades de severidad en el conjunto sintético actual.
 
 \begin{table}[h]
 \centering\scriptsize
@@ -257,13 +271,12 @@ severidad: los seis casos stealth que $O\cup C$ no captura.
 \toprule
 Política & Costo & Daño residual & Éxito del ataque\\
 \midrule
-baseline ($O+C$) & 52.8 & 15.0 & 50.0\%\\
-action-only ($O$) & 24.0 & 15.0 & 50.0\%\\
-nla-probe-cot priority & 52.5 & 18.0 & 66.7\%\\
-probe-nla-cot priority & 52.5 & 18.0 & 66.7\%\\
-cot-nla priority & 51.8 & 18.0 & 66.7\%
-\\
-LP post-hoc (límite superior) & 44.4 & 9.0 & 33.3\%\\
+baseline ($O+C$) & \policyBaselineCost & \policyBaselineResidual & \policyBaselineAS\\
+action-only ($O$) & \policyActionOnlyCost & \policyActionOnlyResidual & \policyActionOnlyAS\\
+nla-probe-cot priority & \policyNlaProbeCotCost & \policyNlaProbeCotResidual & \policyNlaProbeCotAS\\
+probe-nla-cot priority & \policyProbeNlaCotCost & \policyProbeNlaCotResidual & \policyProbeNlaCotAS\\
+cot-nla priority & \policyCotNlaCost & \policyCotNlaResidual & \policyCotNlaAS\\
+LP post-hoc (límite superior) & \policyLPCost & \policyLPResidual & \policyLPAS\\
 \bottomrule
 \end{tabular}
 \caption{Trade-off mock de políticas fijas. Los nombres indican prioridad de
@@ -275,9 +288,9 @@ Las rutas internas fijas rinden peor porque la asignación basada solo en severi
 consume presupuesto en todos los casos de reportes de alta severidad, incluso
 los benignos y rechazados, antes de alcanzar sabotajes de menor severidad. Es
 un hallazgo de integración útil: una señal informativa no compensa un objetivo
-de routing sin riesgo o beneficio calibrado. La fila LP reutiliza beneficios observados en el mismo mock y es un límite
-superior optimista, no una estimación desplegable. Esto no acepta ni rechaza
-las hipótesis de modelos reales.
+de routing sin riesgo o beneficio calibrado. La fila LP reutiliza beneficios
+observados en el mismo mock y es un límite superior optimista, no una estimación
+desplegable. Esto no acepta ni rechaza las hipótesis de modelos reales.
 
 \section{Reproducibilidad, limitaciones y seguridad}
 El repositorio congela seeds, model IDs, capa, marker, split LOTO, costos y
@@ -286,8 +299,10 @@ otra \texttt{real}. La segunda descarga checkpoints faltantes, usa BF16 con
 ubicación automática CUDA/CPU, mantiene los retries de API fuera de la
 inferencia de Qwen, rechaza por defecto conjuntos Gemini incompletos y registra
 procedencia. El structured JSON de Gemini sigue el contrato oficial
-\cite{google2026gemini}. El dashboard consume el mismo summary y marca los datos
-mock. El artefacto acompaña el paper \cite{budgetnla2026}.
+\cite{google2026gemini}. El dashboard y las dos versiones lingüísticas del paper
+consumen el mismo contrato canónico de resultados; el dashboard puede iniciarse
+con \texttt{streamlit run app/dashboard.py}. El artefacto acompaña el paper
+\cite{budgetnla2026}.
 
 El piloto es pequeño, sintético y limitado a un modelo, una capa, un adapter y
 un judge. Dos variantes lingüísticas no representan variación amplia. Las
