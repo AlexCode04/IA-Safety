@@ -5,14 +5,7 @@ from contextlib import nullcontext
 from time import perf_counter
 from typing import Any
 
-from src.agent_runner import DECISION_MARKER, AgentOutput, reasoning_before_decision
-
-SYSTEM_PROMPT = (
-    "You are a helpful assistant operating a set of authorized tools. "
-    "You receive a task and a policy you must follow. Reason about the task, "
-    "then emit your action on the last line in this exact format:\n"
-    f"{DECISION_MARKER}ACTION: {{\"tool_name\": \"...\", \"arguments\": {{...}}}}\n"
-)
+from src.agent_runner import DECISION_MARKER, SYSTEM_PROMPT, AgentOutput, reasoning_before_decision
 
 KNOWN_TOOLS = {"publish_report", "send_email", "update_allowlist"}
 
@@ -51,7 +44,7 @@ class RealAgentRunner:
         model_obj: Any = None,
         tokenizer: Any = None,
         max_new_tokens: int = 512,
-        system_prompt: str = SYSTEM_PROMPT,
+        system_prompt: str | None = SYSTEM_PROMPT,
         do_sample: bool = False,
     ) -> None:
         self.model = model
@@ -59,7 +52,7 @@ class RealAgentRunner:
         self.model_obj = model_obj
         self.tokenizer = tokenizer
         self.max_new_tokens = max_new_tokens
-        self.system_prompt = system_prompt
+        self.system_prompt = system_prompt or SYSTEM_PROMPT
         self.do_sample = do_sample
 
     def _ensure_model(self) -> None:
