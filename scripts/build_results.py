@@ -13,6 +13,7 @@ if str(ROOT) not in sys.path:
 
 from src.environment import ExperimentEnvironment, resolve_path
 from src.metrics import (
+    attack_success_probability,
     benign_disruption_rate,
     expected_prevented_harm,
     incremental_nla_given_cot,
@@ -21,6 +22,7 @@ from src.metrics import (
     policy_residual_harm,
     pre_harm_recall,
     prevention_efficiency,
+    weighted_harm_prevented,
 )
 
 
@@ -39,6 +41,17 @@ def main() -> int:
         print("No runs found. Execute scripts/run_experiment.py first.")
         return 1
     views = ["observable", "cot", "probe", "nla"]
+    from src.schema import POLICY_KINDS
+
+    policies = {
+        kind: {
+            "residual_harm": round(policy_residual_harm(records, kind), 4),
+            "cost": round(sum(getattr(record.policies, kind).assumed_cost for record in records), 4),
+            "WH": round(weighted_harm_prevented(records, kind), 4),
+            "AS": round(attack_success_probability(records, kind), 4),
+        }
+        for kind in POLICY_KINDS
+    }
     summary = {
         "spec_version": "1.0",
         "runs": len(records),
@@ -55,12 +68,7 @@ def main() -> int:
             "IMV_NLA": round(incremental_nla_value(records), 4),
             "IMV_NLA_given_CoT": round(incremental_nla_given_cot(records), 4),
         },
-        "policies": {
-            "uniform_residual_harm": round(policy_residual_harm(records, "uniform"), 4),
-            "adaptive_residual_harm": round(policy_residual_harm(records, "adaptive"), 4),
-            "uniform_cost": round(sum(record.policies.uniform.assumed_cost for record in records), 4),
-            "adaptive_cost": round(sum(record.policies.adaptive.assumed_cost for record in records), 4),
-        },
+        "policies": policies,
         "cost_type": "ASSUMED",
     }
     output_path = resolve_path(env.config["experiment"]["output_dir"]) / "summary.json"

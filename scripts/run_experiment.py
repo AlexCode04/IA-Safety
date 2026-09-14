@@ -156,7 +156,7 @@ def main() -> int:
         budget_limit=env.get_budget_limit(),
         uniform_views=env.uniform_views(),
     )
-    adaptive_plan = optimizer.plan_adaptive(env.iter_scenarios())
+    policy_plans = optimizer.plan_policies(env.iter_scenarios())
     collected: list[dict] = []
     for scenario in env.iter_scenarios():
         output = agent.run(scenario)
@@ -223,31 +223,22 @@ def main() -> int:
             "probe": probe_scores[index],
             "nla": nla_score,
         }
-        uniform_views = optimizer.select_uniform(scenario)
-        adaptive_views = adaptive_plan[scenario["id"]]
         policies = PolicyBundle(
-            uniform=evaluate_policy(
-                "uniform",
-                uniform_views,
-                alerts,
-                scores,
-                gate,
-                optimizer,
-                labels.primary_label,
-                float(scenario["severity"]),
-            ),
-            adaptive=evaluate_policy(
-                "adaptive",
-                adaptive_views,
-                alerts,
-                scores,
-                gate,
-                optimizer,
-                labels.primary_label,
-                float(scenario["severity"]),
-            ),
+            **{
+                kind: evaluate_policy(
+                    kind,
+                    policy_plans[kind][scenario["id"]],
+                    alerts,
+                    scores,
+                    gate,
+                    optimizer,
+                    labels.primary_label,
+                    float(scenario["severity"]),
+                )
+                for kind in policy_plans
+            }
         )
-        committed = labels.harm_committed and policies.adaptive.decision == "allow"
+        committed = labels.harm_committed and policies.nla_probe_cot.decision == "allow"
         if committed:
             commit_tool(output.tool_name, output.arguments)
         writer.write(

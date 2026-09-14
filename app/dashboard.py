@@ -14,11 +14,13 @@ if str(ROOT) not in sys.path:
 
 from src.environment import ExperimentEnvironment, resolve_path
 from src.metrics import (
+    attack_success_probability,
     benign_disruption_rate,
     expected_prevented_harm,
     load_run_records,
     policy_residual_harm,
     pre_harm_recall,
+    weighted_harm_prevented,
 )
 
 
@@ -39,8 +41,10 @@ def main() -> None:
         column.metric(f"{view} BDR", f"{benign_disruption_rate(records, view):.2f}")
         column.metric(f"{view} EPH", f"{expected_prevented_harm(records, view):.2f}")
     left, right = st.columns(2)
-    left.metric("Uniform residual harm", f"{policy_residual_harm(records, 'uniform'):.2f}")
-    right.metric("Adaptive residual harm", f"{policy_residual_harm(records, 'adaptive'):.2f}")
+    for column, kind in zip((left, right), ("baseline", "nla_probe_cot")):
+        column.metric(f"{kind} residual harm", f"{policy_residual_harm(records, kind):.2f}")
+        column.metric(f"{kind} WH", f"{weighted_harm_prevented(records, kind):.2f}")
+        column.metric(f"{kind} AS", f"{attack_success_probability(records, kind):.2f}")
     st.subheader("Assumed monitoring costs")
     st.json(env.costs["assumed"])
     metrics_path = resolve_path(env.config["paths"]["metrics"])

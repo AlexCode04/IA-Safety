@@ -2,10 +2,16 @@ from pathlib import Path
 
 from src.environment import ExperimentEnvironment
 from src.ground_truth import build_labels
-from src.metrics import incremental_nla_value, load_run_records, pre_harm_recall
+from src.metrics import (
+    attack_success_probability,
+    incremental_nla_value,
+    load_run_records,
+    pre_harm_recall,
+    weighted_harm_prevented,
+)
 from src.optimizer import BudgetOptimizer
 from src.policy_gate import PolicyGate
-from src.schema import SCHEMA_VERSION
+from src.schema import POLICY_KINDS, SCHEMA_VERSION
 from src.tools import is_unauthorized
 
 
@@ -50,6 +56,18 @@ def test_optimizer_keeps_adaptive_within_budget() -> None:
     assert any("nla" in views for views in plan.values())
 
 
+def test_plan_policies_covers_baseline_plus_four_policies_within_budget() -> None:
+    env = ExperimentEnvironment()
+    optimizer = BudgetOptimizer(env.costs["assumed"], env.get_budget_limit(), env.uniform_views())
+    plans = optimizer.plan_policies(env.iter_scenarios())
+    assert set(plans) == set(POLICY_KINDS)
+    for kind, plan in plans.items():
+        assert set(plan) == {scenario["id"] for scenario in env.iter_scenarios()}
+        spent = sum(optimizer.cost_of(views) for views in plan.values())
+        assert spent <= env.get_budget_limit() + 1e-9
+    assert plans["action_only"] == {scenario["id"]: ["observable"] for scenario in env.iter_scenarios()}
+
+
 def test_policy_gate_blocks_on_selected_alert() -> None:
     gate = PolicyGate()
     decision, _reason = gate.decide(["observable", "nla"], {"observable": False, "nla": True}, {"nla": 0.9})
@@ -78,4 +96,9 @@ def test_run_experiment_writes_schema_records(tmp_path: Path, monkeypatch) -> No
     assert all(record.activation.position_name == "PRE_ACTION_DECISION_BOUNDARY" for record in records)
     assert pre_harm_recall(records, "nla") >= pre_harm_recall(records, "observable")
     assert incremental_nla_value(records) >= 0
+    attempts = [record for record in records if record.labels.primary_label == 1]
+    assert weighted_harm_prevented(records, "nla_probe_cot") >= 0
+    assert 0.0 <= attack_success_probability(records, "nla_probe_cot") <= 1.0
+    if attempts:
+        assert weighted_harm_prevented(records, "baseline") <= 1.0
     assert metrics_path.exists()

@@ -2,6 +2,14 @@
 
 from typing import Any
 
+POLICY_PRIORITY: dict[str, list[list[str]]] = {
+    "baseline": [],
+    "action_only": [["observable"]],
+    "nla_probe_cot": [["observable", "nla"], ["observable", "probe"], ["observable"]],
+    "probe_nla_cot": [["observable", "probe", "nla"], ["observable", "probe"], ["observable"]],
+    "cot_nla": [["observable", "cot", "nla"], ["observable", "cot"], ["observable"]],
+}
+
 
 class BudgetOptimizer:
     def __init__(self, assumed_costs: dict[str, float], budget_limit: float, uniform_views: list[str]) -> None:
@@ -31,3 +39,23 @@ class BudgetOptimizer:
             assigned[scenario["id"]] = views
             remaining -= self.cost_of(views)
         return assigned
+
+    def plan_policies(self, scenarios: list[dict[str, Any]]) -> dict[str, dict[str, list[str]]]:
+        plans: dict[str, dict[str, list[str]]] = {}
+        for kind, priority in POLICY_PRIORITY.items():
+            if kind == "baseline":
+                plans[kind] = {scenario["id"]: self.select_uniform(scenario) for scenario in scenarios}
+                continue
+            remaining = self.budget_limit
+            ranked = sorted(scenarios, key=lambda item: float(item["severity"]), reverse=True)
+            assigned: dict[str, list[str]] = {}
+            for scenario in ranked:
+                views: list[str] = []
+                for candidate in priority:
+                    if remaining >= self.cost_of(candidate):
+                        views = candidate
+                        break
+                assigned[scenario["id"]] = views
+                remaining -= self.cost_of(views)
+            plans[kind] = assigned
+        return plans
