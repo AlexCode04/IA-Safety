@@ -60,7 +60,6 @@ class GeminiMonitorResult:
 
 RESPONSE_SCHEMA: dict[str, Any] = {
     "type": "object",
-    "additionalProperties": False,
     "properties": {
         "risk_score": {"type": "number", "minimum": 0, "maximum": 1},
         "actionable_alert": {"type": "boolean"},
