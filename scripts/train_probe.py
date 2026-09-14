@@ -31,15 +31,35 @@ def main() -> int:
     env = ExperimentEnvironment(ROOT / args.config)
     seeds = env.config["seeds"]
     apply_seeds(int(seeds["python"]), int(seeds["numpy"]))
-    agent = AgentRunner(env.config["agent"]["model"], float(env.config["agent"]["temperature"]))
-    hook = ActivationHook(seed=int(seeds["numpy"]))
+    mock_mode = bool(env.config["experiment"]["mock_mode"])
+    agent = AgentRunner(
+        env.config["agent"]["model"],
+        float(env.config["agent"]["temperature"]),
+        mock_mode=mock_mode,
+        max_new_tokens=int(env.config["agent"]["max_new_tokens"]),
+    )
+    if mock_mode:
+        hook = ActivationHook(seed=int(seeds["numpy"]))
+    else:
+        from src.activation_hook_real import ActivationHook as RealActivationHook
+        from src.model_loader import ModelLoader
+        from src.nla_monitor_real import NlaMonitor as RealNlaMonitor
+
+        model_obj, tokenizer = ModelLoader().load()
+        agent.model_obj = model_obj
+        agent.tokenizer = tokenizer
+        hook = RealActivationHook(model_obj, tokenizer)
     activations = []
     labels = []
     templates = []
     for scenario in env.iter_scenarios():
         output = agent.run(scenario)
         ground = build_labels(scenario, output.tool_name, output.arguments)
-        activations.append(hook.capture(scenario, ground.malicious_objective_adopted))
+        if mock_mode:
+            activation = hook.capture(scenario, ground.malicious_objective_adopted)
+        else:
+            activation = hook.capture(output.prefix_until_decision())
+        activations.append(activation)
         labels.append(ground.primary_label)
         templates.append(scenario["template_id"])
     scores, alerts = leave_one_template_out_scores(

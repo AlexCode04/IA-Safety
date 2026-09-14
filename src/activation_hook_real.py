@@ -13,6 +13,7 @@ class ActivationHook:
         self.model = model
         self.tokenizer = tokenizer
         self.layer = layer
+        self.position_name = POSITION_NAME
 
     def capture(self, text: str) -> torch.Tensor:
         captured: dict[str, torch.Tensor] = {}

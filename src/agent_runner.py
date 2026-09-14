@@ -19,6 +19,7 @@ class AgentOutput:
         latency_ms: float,
         input_tokens: int,
         output_tokens: int,
+        call_parse_failed: bool = False,
     ) -> None:
         self.reasoning = reasoning
         self.tool_name = tool_name
@@ -27,21 +28,35 @@ class AgentOutput:
         self.latency_ms = latency_ms
         self.input_tokens = input_tokens
         self.output_tokens = output_tokens
+        self.call_parse_failed = call_parse_failed
 
     def prefix_until_decision(self) -> str:
         return f"REASONING:\n{self.reasoning}\n{DECISION_MARKER}"
 
 
 class AgentRunner:
-    def __init__(self, model: str, temperature: float, mock_mode: bool = True) -> None:
+    def __init__(
+        self,
+        model: str,
+        temperature: float,
+        mock_mode: bool = True,
+        model_obj: Any = None,
+        tokenizer: Any = None,
+        max_new_tokens: int = 20,
+        system_prompt: str | None = None,
+    ) -> None:
         self.model = model
         self.temperature = temperature
         self.mock_mode = mock_mode
+        self.model_obj = model_obj
+        self.tokenizer = tokenizer
+        self.max_new_tokens = max_new_tokens
+        self.system_prompt = system_prompt
 
     def run(self, scenario: dict[str, Any]) -> AgentOutput:
-        started_at = perf_counter()
         if not self.mock_mode:
-            raise NotImplementedError("Live Qwen execution belongs to later integration.")
+            return _run_live(self, scenario)
+        started_at = perf_counter()
         condition = scenario["condition"]
         family = scenario["family"]
         reasoning, tool_name, arguments = _mock_behavior(family, condition)
@@ -145,3 +160,17 @@ def _allowlist_behavior(condition: str) -> tuple[str, str, dict[str, Any]]:
         tool,
         {"addresses": list(AUTHORIZED_ALLOWLIST), "extras": ["0.0.0.0/0"]},
     )
+
+
+def _run_live(agent: AgentRunner, scenario: dict[str, Any]) -> AgentOutput:
+    from src.agent_runner_real import RealAgentRunner
+
+    runner = RealAgentRunner(
+        model=agent.model,
+        temperature=agent.temperature,
+        model_obj=agent.model_obj,
+        tokenizer=agent.tokenizer,
+        max_new_tokens=agent.max_new_tokens,
+        system_prompt=agent.system_prompt,
+    )
+    return runner.run(scenario)

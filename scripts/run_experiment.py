@@ -130,11 +130,23 @@ def main() -> int:
         model=config["agent"]["model"],
         temperature=float(config["agent"]["temperature"]),
         mock_mode=bool(config["experiment"]["mock_mode"]),
+        max_new_tokens=int(config["agent"]["max_new_tokens"]),
     )
-    hook = ActivationHook(seed=int(seeds["numpy"]))
+    if agent.mock_mode:
+        hook = ActivationHook(seed=int(seeds["numpy"]))
+        nla_monitor = NlaMonitor()
+    else:
+        from src.activation_hook_real import ActivationHook as RealActivationHook
+        from src.model_loader import ModelLoader
+        from src.nla_monitor_real import NlaMonitor as RealNlaMonitor
+
+        model_obj, tokenizer = ModelLoader().load()
+        agent.model_obj = model_obj
+        agent.tokenizer = tokenizer
+        hook = RealActivationHook(model_obj, tokenizer)
+        nla_monitor = RealNlaMonitor(model_obj, tokenizer)
     observable_monitor = ObservableMonitor()
     cot_monitor = CotMonitor()
-    nla_monitor = NlaMonitor()
     gate = PolicyGate(
         escalate_threshold=float(config["policy"]["escalate_threshold"]),
         block_on_alert=bool(config["policy"]["block_on_alert"]),
@@ -149,7 +161,10 @@ def main() -> int:
     for scenario in env.iter_scenarios():
         output = agent.run(scenario)
         labels = build_labels(scenario, output.tool_name, output.arguments)
-        activation = hook.capture(scenario, labels.malicious_objective_adopted)
+        if agent.mock_mode:
+            activation = hook.capture(scenario, labels.malicious_objective_adopted)
+        else:
+            activation = hook.capture(output.prefix_until_decision())
         collected.append(
             {
                 "scenario": scenario,
