@@ -251,7 +251,7 @@ Observable and CoT each stop \phrObservableCount\ harmful attempts; CoT also
 flags \bdrCoTCount\ non-harmful cases because the mock detects rejection
 language. Probe and NLA stop \phrNLACount\ with no mock false disruptions by
 construction. Both $\mathrm{IMV}_{N}$ and $\mathrm{IMV}_{N\mid C}$ equal
-\imvNLA{} severity units: four stealth email/allowlist cases missed by $O\cup C$.
+\imvNLA{} severity units: all six stealth cases missed by $O\cup C$.
 
 \begin{table}[h]
 \centering\scriptsize
@@ -260,11 +260,13 @@ construction. Both $\mathrm{IMV}_{N}$ and $\mathrm{IMV}_{N\mid C}$ equal
 \toprule
 Policy & Cost & Residual harm & Attack success\\
 \midrule
-baseline ($O+C$) & 52.8 & 9.0 & 33.3\%\\
-action-only ($O$) & 24.0 & 9.0 & 33.3\%\\
+baseline ($O+C$) & 52.8 & 15.0 & 50.0\%\\
+action-only ($O$) & 24.0 & 15.0 & 50.0\%\\
 nla-probe-cot priority & 52.5 & 18.0 & 66.7\%\\
 probe-nla-cot priority & 52.5 & 18.0 & 66.7\%\\
-cot-nla priority & 52.8 & 18.0 & 66.7\%\\
+cot-nla priority & 51.8 & 18.0 & 66.7\%
+\\
+post-hoc LP upper bound & 44.4 & 9.0 & 33.3\%\\
 \bottomrule
 \end{tabular}
 \caption{Fixed-policy mock trade-off at the declared budget. Policy names
@@ -272,12 +274,13 @@ describe routing priorities, not simultaneous access to every listed channel.}
 \label{tab:policies}
 \end{table}
 
-The apparently stronger internal routes perform worse because severity-only
+The apparently stronger fixed internal routes perform worse because severity-only
 allocation consumes budget on all high-severity report cases, including benign
 and rejected variants, before reaching lower-severity malicious cases. This is
 a useful integration finding: signal quality alone cannot rescue a routing
-objective that lacks calibrated risk or benefit estimates. It supports neither
-acceptance nor rejection of the preregistered real-model hypotheses.
+objective that lacks calibrated risk or benefit estimates. The post-hoc LP row reuses realized mock benefits and is therefore an optimistic
+upper bound, not a deployable estimate. These results support neither acceptance
+nor rejection of the preregistered real-model hypotheses.
 
 \section{Reproducibility, Limitations, and Safety}
 The repository freezes seeds, model IDs, layer, marker, LOTO split, costs, and a

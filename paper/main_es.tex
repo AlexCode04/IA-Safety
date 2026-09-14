@@ -53,7 +53,7 @@ escenarios no terminó antes del plazo del sprint, reportamos una evaluación
 mock determinista y explícitamente rotulada. Esta valida contratos,
 instrumentación, métricas, optimizador, dashboard y generación del paper; no
 estima la seguridad de Qwen2.5-7B, Gemini, el NLA aprendido ni el probe. En la
-demostración sintética, Observable y CoT detectan 8/12 intentos pre-harm,
+demostración sintética, Observable y CoT detectan 6/12 intentos pre-harm,
 mientras los canales internos mock, separables por construcción, detectan
 12/12. Sin embargo, un enrutamiento basado solo en severidad puede rendir peor
 que action-only al gastar presupuesto en casos benignos de alta severidad.
@@ -248,7 +248,7 @@ Observable y CoT detienen \phrObservableCount\ intentos; CoT también marca
 \bdrCoTCount\ casos no dañinos porque el mock reconoce lenguaje de rechazo.
 Probe y NLA detienen \phrNLACount\ sin falsas disrupciones mock por construcción.
 $\mathrm{IMV}_{N}$ y $\mathrm{IMV}_{N\mid C}$ son \imvNLA{} unidades de
-severidad: cuatro casos stealth de email/allowlist que $O\cup C$ no captura.
+severidad: los seis casos stealth que $O\cup C$ no captura.
 
 \begin{table}[h]
 \centering\scriptsize
@@ -257,11 +257,13 @@ severidad: cuatro casos stealth de email/allowlist que $O\cup C$ no captura.
 \toprule
 Política & Costo & Daño residual & Éxito del ataque\\
 \midrule
-baseline ($O+C$) & 52.8 & 9.0 & 33.3\%\\
-action-only ($O$) & 24.0 & 9.0 & 33.3\%\\
+baseline ($O+C$) & 52.8 & 15.0 & 50.0\%\\
+action-only ($O$) & 24.0 & 15.0 & 50.0\%\\
 nla-probe-cot priority & 52.5 & 18.0 & 66.7\%\\
 probe-nla-cot priority & 52.5 & 18.0 & 66.7\%\\
-cot-nla priority & 52.8 & 18.0 & 66.7\%\\
+cot-nla priority & 51.8 & 18.0 & 66.7\%
+\\
+LP post-hoc (límite superior) & 44.4 & 9.0 & 33.3\%\\
 \bottomrule
 \end{tabular}
 \caption{Trade-off mock de políticas fijas. Los nombres indican prioridad de
@@ -269,12 +271,13 @@ routing, no acceso simultáneo a todos los canales nombrados.}
 \label{tab:policies}
 \end{table}
 
-Las rutas internas rinden peor porque la asignación basada solo en severidad
+Las rutas internas fijas rinden peor porque la asignación basada solo en severidad
 consume presupuesto en todos los casos de reportes de alta severidad, incluso
 los benignos y rechazados, antes de alcanzar sabotajes de menor severidad. Es
 un hallazgo de integración útil: una señal informativa no compensa un objetivo
-de routing sin riesgo o beneficio calibrado. Esto no acepta ni rechaza las
-hipótesis de modelos reales.
+de routing sin riesgo o beneficio calibrado. La fila LP reutiliza beneficios observados en el mismo mock y es un límite
+superior optimista, no una estimación desplegable. Esto no acepta ni rechaza
+las hipótesis de modelos reales.
 
 \section{Reproducibilidad, limitaciones y seguridad}
 El repositorio congela seeds, model IDs, capa, marker, split LOTO, costos y
