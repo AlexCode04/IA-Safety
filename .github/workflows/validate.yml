@@ -28,11 +28,13 @@ jobs:
           python scripts/build_results.py
           python scripts/generate_paper_figures.py --allow-mock
           python scripts/generate_policy_macros.py
+          python scripts/generate_dashboard_preview.py
       - name: Verify generated paper macros are synchronized
         run: |
           git diff --exit-code -- \
             paper/generated_results.tex \
-            paper/generated_policy_results.tex
+            paper/generated_policy_results.tex \
+            app/web/preview.html
       - name: Dashboard schema and JavaScript smoke test
         run: |
           node --check app/web/app.js

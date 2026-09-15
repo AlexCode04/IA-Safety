@@ -15,6 +15,12 @@ edit experimental numbers directly in either manuscript. Channel metrics are
 generated from `results/summary.json`; policy-table macros are generated from
 `results/summary.json` plus `results/runs.jsonl`.
 
+The dashboard figure in both papers uses two screenshots of the current
+operator interface (`dashboard_overview.jpg` and `dashboard_cases.jpg`). They
+show the deterministic mock run and remain explicitly labelled as synthetic in
+the manuscripts. `dashboard_summary.pdf` is the reproducible publication-style
+summary generated from the same canonical metrics.
+
 ## Current sprint deliverable
 
 The committed values are from the deterministic mock pipeline and are visibly
@@ -123,7 +129,8 @@ Upload the complete `paper/` folder. Choose either `main_en.tex` or
 - `references.bib`;
 - `figures/system_pipeline.pdf`;
 - `figures/experimental_matrix.pdf`;
-- `figures/dashboard_summary.pdf`.
+- `figures/dashboard_overview.jpg`;
+- `figures/dashboard_cases.jpg`.
 
 Both entry points use Latin Modern vector fonts and place the abstract/resumen
 across the full text width before the two-column body. Keep the complete author

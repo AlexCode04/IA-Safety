@@ -195,11 +195,21 @@ or blocked rather than as a separate source of results.
 
 \begin{figure*}[t]
 \centering
-\includegraphics[width=0.97\textwidth]{figures/dashboard_summary.pdf}
-\caption{Static publication view of the operator dashboard, regenerated from
-the same canonical summary used by both manuscripts. The red provenance badge
-prevents the synthetic demonstration from being mistaken for real-model
-evidence; the interactive application adds filters and per-case drill-down.}
+\colorbox{budgetred}{\color{white}\bfseries\footnotesize SYNTHETIC / MOCK}\par\vspace{3pt}
+\begin{minipage}[t]{0.487\textwidth}
+\centering
+\includegraphics[width=\linewidth]{figures/dashboard_overview.jpg}\par
+\footnotesize (a) Channel and policy overview
+\end{minipage}\hfill
+\begin{minipage}[t]{0.487\textwidth}
+\centering
+\includegraphics[width=\linewidth]{figures/dashboard_cases.jpg}\par
+\footnotesize (b) Filtered case-level inspection
+\end{minipage}
+\caption{The actual operator dashboard in dark theme, populated from the
+current deterministic 24-case mock run. The screenshots document the
+interactive interface and its traceability from aggregate metrics to decisions;
+they do not represent real-model performance.}
 \label{fig:dashboard}
 \end{figure*}
 

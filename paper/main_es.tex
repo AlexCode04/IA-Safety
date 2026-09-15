@@ -197,11 +197,21 @@ una fuente separada de resultados.
 
 \begin{figure*}[t]
 \centering
-\includegraphics[width=0.97\textwidth]{figures/dashboard_summary.pdf}
-\caption{Vista estática para publicación del dashboard operacional, regenerada
-desde el mismo resumen canónico que consumen ambos documentos. La insignia roja
-de procedencia impide confundir la demostración sintética con evidencia de
-modelos reales; la aplicación interactiva agrega filtros e inspección por caso.}
+\colorbox{budgetred}{\color{white}\bfseries\footnotesize SYNTHETIC / MOCK}\par\vspace{3pt}
+\begin{minipage}[t]{0.487\textwidth}
+\centering
+\includegraphics[width=\linewidth]{figures/dashboard_overview.jpg}\par
+\footnotesize (a) Resumen de canales y políticas
+\end{minipage}\hfill
+\begin{minipage}[t]{0.487\textwidth}
+\centering
+\includegraphics[width=\linewidth]{figures/dashboard_cases.jpg}\par
+\footnotesize (b) Inspección filtrada de casos
+\end{minipage}
+\caption{Dashboard operacional real en tema oscuro, alimentado por la corrida
+mock determinística actual de 24 casos. Las capturas documentan la interfaz
+interactiva y su trazabilidad desde las métricas agregadas hasta las decisiones;
+no representan desempeño de modelos reales.}
 \label{fig:dashboard}
 \end{figure*}
 
