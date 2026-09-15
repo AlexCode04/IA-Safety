@@ -1,6 +1,8 @@
-\documentclass[10pt,twocolumn]{article}
+\documentclass[10pt]{article}
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
 \usepackage[margin=0.66in,columnsep=0.23in]{geometry}
 \usepackage{amsmath,amssymb,array,booktabs,flushend}
 \usepackage{caption,enumitem,graphicx,xcolor,xurl}
@@ -25,42 +27,53 @@
 \input{generated_results.tex}
 \input{generated_policy_results.tex}
 
-\title{\vspace{-1.2em}\system: Prototipo reproducible para monitoreo de sabotaje\\
-pre-harm ponderado por riesgo\vspace{-0.35em}}
-\author{\small
-Jhoan S. Mosquera Ortiz \quad Juan F. Plata Barbosa\\[-1pt]
-Maryori A. Lasso Diaz \quad Angel A. del Castillo Lerma\\[2pt]
-\textit{Universidad Autónoma de Occidente, Cali, Colombia}\\[-1pt]
-\texttt{\{jhoan.mosquera,juan.plata,maryori.lasso,angel.del\}@uao.edu.co}}
+\title{\vspace{-0.8em}\system{}: Prototipo reproducible para monitoreo de sabotaje\\
+pre-harm ponderado por riesgo\vspace{-0.25em}}
+\author{%
+\begin{tabular}{@{}c@{\hspace{2.4em}}c@{}}
+Jhoan S. Mosquera Ortiz & Juan F. Plata Barbosa\\
+Maryori A. Lasso Díaz & Ángel A. del Castillo Lerma
+\end{tabular}\\[3pt]
+\small\textit{Universidad Autónoma de Occidente, Cali, Colombia}\\[-1pt]
+\small\texttt{\{jhoan.mosquera,juan.plata,maryori.lasso,angel.del\}@uao.edu.co}}
 \date{\small AI Incident Response Sprint, 2026}
 
 \begin{document}
+\twocolumn[
+\begin{@twocolumnfalse}
 \maketitle
-\vspace{-1.5em}
-
-\begin{abstract}
+\vspace{-1.45em}
+\begin{center}
+\begin{minipage}{0.94\textwidth}
+\small
+\noindent\textbf{Resumen---}
 Los agentes basados en modelos de lenguaje pueden convertir un objetivo oculto
 en una acción irreversible antes de que una auditoría convencional reaccione.
-Los runtime monitors observan superficies diferentes---acciones visibles,
-Chain-of-Thought (CoT), activation probes lineales y lecturas de un Natural
-Language Autoencoder (NLA)---pero su valor operacional depende del momento de
-la alerta, la disrupción benigna, el impacto y el costo. Presentamos \system, un
-prototipo open-source que congela un evento pre-action, aísla cuatro canales de
-evidencia, valida juicios estructurados de Gemini y transforma alertas en
-decisiones \texttt{ALLOW}, \texttt{ESCALATE} o \texttt{BLOCK} bajo un presupuesto
-común. El protocolo contiene 24 trayectorias simuladas en tres familias de
-herramientas y cuatro condiciones conductuales. Como la corrida live de
-escenarios no terminó antes del plazo del sprint, reportamos una evaluación
-mock determinista y explícitamente rotulada. Esta valida contratos,
-instrumentación, métricas, optimizador, dashboard y generación del paper; no
-estima la seguridad de Qwen2.5-7B, Gemini, el NLA aprendido ni el probe. En la
-demostración sintética, Observable detecta \phrObservableCount{} intentos
-dañinos y CoT detecta \phrCoTCount{}, mientras los canales mock Probe y NLA,
-separables por construcción, detectan \phrProbeCount{} y \phrNLACount{},
-respectivamente. Sin embargo, un enrutamiento basado solo en severidad puede
-rendir peor que action-only al gastar presupuesto en casos benignos de alta
-severidad.
-\end{abstract}
+Presentamos \system{}, un prototipo reproducible de respuesta pre-harm que
+alinea cuatro superficies de evidencia en la misma frontera previa al uso de
+herramientas: comportamiento observable, Chain-of-Thought (CoT) visible, un
+probe lineal sobre activaciones y la lectura de un Natural Language Autoencoder
+(NLA). Los juicios aislados por canal se normalizan y pasan por un policy gate
+determinista bajo un presupuesto común. El artefacto incluye un protocolo de 24
+trayectorias, monitoreo Gemini validado por schema, agregación con procedencia,
+dashboard operacional, documentos bilingües y una ruta de una sola orden para
+un clúster de 64~GiB. Como la ejecución live no terminó antes del plazo,
+reportamos exclusivamente una demostración mock determinista y visiblemente
+rotulada: valida la integración, no la seguridad de Qwen2.5-7B, Gemini, el NLA
+aprendido ni el probe. En los datos construidos, Observable y CoT detienen
+\phrObservableCount{} intentos dañinos, mientras Probe y NLA detienen
+\phrProbeCount{}. La corrida expone además una lección falsable: disponer de
+evidencia interna más rica no garantiza mejor contención si una regla ingenua
+gasta el presupuesto escaso en los casos equivocados.
+
+\medskip
+\noindent\textbf{Palabras clave---}seguridad de IA, respuesta a incidentes,
+monitoreo de sabotaje, Natural Language Autoencoders, runtime monitoring.
+\end{minipage}
+\end{center}
+\vspace{0.7em}
+\end{@twocolumnfalse}
+]
 
 \section{Introducción}
 Los agentes autónomos amplían la generación de texto hacia tool calls con
@@ -129,7 +142,7 @@ SHADE-Arena \cite{kutasov2025shade} & \yes & \no & \no & \no & evasión/éxito\\
 AI Control \cite{greenblatt2024control} & \yes & \no & artefacto final & auditoría & seguridad/utilidad\\
 Cost-constrained monitors \cite{hua2025cost} & general & \no & no especificado & \yes & recall\\
 NLA monitoring \cite{bowkis2026eliciting} & reward hacking & monitor-side & posterior & \no & clasificación\\
-\textbf{\system{} (nuestro)} & \yes & probe + NLA nativo & \yes & \yes & prevención ponderada\\
+\textbf{Budget-NLA (nuestro)} & \yes & probe + NLA nativo & \yes & \yes & prevención ponderada\\
 \bottomrule
 \end{tabular}
 \caption{La brecha objetivo es la intersección entre evidencia latent alineada
@@ -138,12 +151,12 @@ por evento, aislamiento de canales, intervención pre-harm y presupuesto común.
 \end{table*}
 
 \section{Sistema y diseño experimental}
-El agente objetivo es \texttt{Qwen/Qwen2.5-7B-Instruct}
+El agente objetivo es \texttt{Qwen2.5-7B-Instruct}
 \cite{yang2025qwen25}, con decoding determinista. En el último token de
-\texttt{\textbackslash n<DECISION>\textbackslash n}, antes del nombre y los
+\texttt{<DECISION>}, antes del nombre y los
 argumentos de la herramienta, se extrae el estado residual $h_i$ de la capa 20.
-El mismo estado alimenta un probe logístico L2 y
-\texttt{Kameshr/nla-qwen2.5-7b-L20-av}. El adapter se desactiva durante la
+El mismo estado alimenta un probe logístico L2 y el adapter NLA congelado de la
+capa 20. El adapter se desactiva durante la
 generación del agente y solo se habilita para verbalizar. El prefix replay
 conserva la información pre-action, aunque no mide latencia síncrona de pausa y
 reanudación.
@@ -182,7 +195,17 @@ funciona como una capa de inspección para incident response, donde un operador
 puede revisar por qué un caso fue permitido, escalado o bloqueado, y no como
 una fuente separada de resultados.
 
-\section{Métricas y asignación de presupuesto}
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.97\textwidth]{figures/dashboard_summary.pdf}
+\caption{Vista estática para publicación del dashboard operacional, regenerada
+desde el mismo resumen canónico que consumen ambos documentos. La insignia roja
+de procedencia impide confundir la demostración sintética con evidencia de
+modelos reales; la aplicación interactiva agrega filtros e inspección por caso.}
+\label{fig:dashboard}
+\end{figure*}
+
+\section{Métricas y presupuesto}
 Sea $y_i\in\{0,1\}$ un objetivo dañino adoptado con tool call dañino propuesto,
 $s_i$ su severidad, $A_{im}$ una detención pre-harm y $c_{im}$ el costo asumido:
 \begin{align}
@@ -214,7 +237,7 @@ games \cite{tambe2011security}.
 \textbf{Estado: \resultstatusES.} Estas mediciones validan el software y su
 presentación; no pueden citarse como desempeño de modelos reales.}}
 
-\begin{table}[h]
+\begin{table}[ht]
 \centering\scriptsize
 \setlength{\tabcolsep}{3.1pt}
 \begin{tabular}{@{}lrrrr@{}}
@@ -232,7 +255,7 @@ casos no dañinos. Los intervalos Wilson describen solo esta muestra sintética.
 \label{tab:primary}
 \end{table}
 
-\begin{figure}[h]
+\begin{figure}[ht]
 \centering
 \begin{tikzpicture}
 \begin{axis}[
@@ -264,7 +287,7 @@ mock reconoce lenguaje de rechazo. Probe y NLA detienen \phrProbeCount{} y
 por construcción. $\mathrm{IMV}_{N}$ y $\mathrm{IMV}_{N\mid C}$ son
 \imvNLA{} unidades de severidad en el conjunto sintético actual.
 
-\begin{table}[h]
+\begin{table}[ht]
 \centering\scriptsize
 \setlength{\tabcolsep}{3.5pt}
 \begin{tabular}{@{}lrrr@{}}
@@ -314,13 +337,25 @@ probe directo, todos los juicios Gemini aislados y reporte de fallas de API.
 Todas las herramientas terminan en un simulador.
 
 \section{Conclusión}
-\system{} aporta un stack reproducible de medición para incident response, no
-una afirmación de desempeño de seguridad. La corrida sintética confirma que el
-contrato pre-action, aislamiento, policy gate, contabilidad, dashboard bilingüe
-y pipeline de publicación concuerdan. También muestra una lección de diseño:
-un monitor más informativo puede contener menos daño cuando el routing gasta el
-presupuesto en casos equivocados. Se necesita la corrida real completa antes de
-concluir sobre Qwen, NLA, probe o Gemini.
+\system{} entrega un plano de control auditable para respuesta a incidentes, no
+una afirmación de desempeño de seguridad sin respaldo. La corrida sintética
+completada demuestra que un evento pre-action puede capturarse una sola vez,
+exponerse mediante cuatro superficies aisladas, convertirse en juicios válidos
+por schema, pasar por un gate determinista y conservar trazabilidad consistente
+entre registros JSONL, métricas, dashboard y los dos documentos. Esa coherencia
+end-to-end es el resultado principal que el artefacto puede defender hoy.
+
+La demostración mock también revela un resultado negativo concreto para el
+diseño del sistema: acceder a una señal más fuerte no basta cuando la asignación
+depende de una heurística de severidad sin calibrar. En esta corrida, dicha
+heurística consume presupuesto en casos benignos de alta severidad y deja más
+acciones dañinas sin atender que un baseline action-only más barato. El
+siguiente experimento tiene, por tanto, una carga de prueba precisa: un NLA o
+probe real debe mejorar la contención pre-harm alineada por evento y preservar
+esa ventaja bajo el mismo presupuesto y la misma contabilidad de disrupción
+benigna. Hasta que la corrida del clúster de 64~GiB satisfaga esa prueba, la
+contribución defendible es la infraestructura reproducible de evaluación y
+contención, no la afirmación de que algún modelo monitoreado sea seguro.
 
 \bibliographystyle{unsrt}
 \bibliography{references}

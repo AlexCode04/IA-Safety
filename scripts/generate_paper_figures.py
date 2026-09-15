@@ -49,7 +49,9 @@ def parse_args() -> argparse.Namespace:
 def configure_style() -> None:
     plt.rcParams.update(
         {
-            "font.family": "DejaVu Sans",
+            "font.family": "serif",
+            "font.serif": ["Latin Modern Roman", "CMU Serif", "DejaVu Serif"],
+            "mathtext.fontset": "cm",
             "font.size": 9,
             "axes.titlesize": 10,
             "axes.labelsize": 9,
@@ -187,6 +189,180 @@ def draw_design_matrix() -> None:
         fontweight="bold",
     )
     save(fig, "experimental_matrix")
+
+
+def draw_dashboard_summary(summary: dict, *, mock_mode: bool) -> None:
+    """Render the operator dashboard's canonical summary as a paper figure."""
+    channels = ["observable", "cot", "probe", "nla"]
+    channel_labels = ["Observable", "CoT", "Probe", "NLA"]
+    channel_colors = [
+        COLORS["blue"],
+        COLORS["cyan"],
+        "#7C3AED",
+        COLORS["gray"],
+    ]
+
+    fig = plt.figure(figsize=(10.9, 4.7), facecolor=COLORS["light"])
+    grid = fig.add_gridspec(
+        2,
+        4,
+        height_ratios=[0.9, 2.25],
+        left=0.045,
+        right=0.975,
+        bottom=0.105,
+        top=0.82,
+        hspace=0.42,
+        wspace=0.24,
+    )
+    fig.text(
+        0.045,
+        0.93,
+        "Budget-NLA operator view",
+        color=COLORS["navy"],
+        fontsize=15,
+        fontweight="bold",
+        va="center",
+    )
+    fig.text(
+        0.045,
+        0.865,
+        "Event-aligned alerts, containment quality, and budget use from one canonical result contract",
+        color=COLORS["gray"],
+        fontsize=9,
+        va="center",
+    )
+    status = "SYNTHETIC / MOCK" if mock_mode else "FROZEN REAL RUN"
+    status_color = COLORS["red"] if mock_mode else COLORS["green"]
+    fig.text(
+        0.975,
+        0.925,
+        status,
+        ha="right",
+        va="center",
+        color="white",
+        fontsize=8.5,
+        fontweight="bold",
+        bbox={"boxstyle": "round,pad=0.45", "facecolor": status_color, "edgecolor": "none"},
+    )
+
+    for index, (key, label, color) in enumerate(
+        zip(channels, channel_labels, channel_colors)
+    ):
+        metrics = summary["primary"][key]
+        ax = fig.add_subplot(grid[0, index])
+        ax.set_facecolor("white")
+        ax.set_xticks([])
+        ax.set_yticks([])
+        for spine in ax.spines.values():
+            spine.set_color("#D8E1EA")
+            spine.set_linewidth(0.8)
+        ax.text(0.06, 0.78, label, transform=ax.transAxes, color=COLORS["gray"], fontsize=8)
+        ax.text(
+            0.06,
+            0.38,
+            f"{100.0 * metrics['PHR']:.0f}%",
+            transform=ax.transAxes,
+            color=color,
+            fontsize=19,
+            fontweight="bold",
+        )
+        ax.text(
+            0.06,
+            0.12,
+            f"pre-harm recall  ·  BDR {100.0 * metrics['BDR']:.0f}%",
+            transform=ax.transAxes,
+            color=COLORS["gray"],
+            fontsize=7.1,
+        )
+
+    ax_channels = fig.add_subplot(grid[1, :2])
+    ax_channels.set_facecolor("white")
+    x = np.arange(len(channels))
+    phr = [100.0 * summary["primary"][key]["PHR"] for key in channels]
+    bdr = [100.0 * summary["primary"][key]["BDR"] for key in channels]
+    width = 0.34
+    ax_channels.bar(
+        x - width / 2,
+        phr,
+        width,
+        color=COLORS["blue"],
+        label="Pre-harm recall",
+    )
+    ax_channels.bar(
+        x + width / 2,
+        bdr,
+        width,
+        color=COLORS["amber"],
+        label="Benign disruption",
+    )
+    ax_channels.set_xticks(x, channel_labels)
+    ax_channels.set_ylim(0, 110)
+    ax_channels.set_ylabel("Rate (%)")
+    ax_channels.set_title("Containment quality by evidence channel", loc="left", fontweight="bold")
+    ax_channels.grid(axis="y", color="#E3E8EF", linewidth=0.7)
+    ax_channels.legend(frameon=False, fontsize=7.5, ncols=2, loc="upper left")
+
+    ax_policy = fig.add_subplot(grid[1, 2:])
+    ax_policy.set_facecolor("white")
+    policy_labels = {
+        "baseline": "baseline",
+        "action_only": "action-only",
+        "nla_probe_cot": "NLA→probe→CoT",
+        "probe_nla_cot": "probe→NLA→CoT",
+        "cot_nla": "CoT→NLA",
+    }
+    label_offsets = {"baseline": (5, -11), "action_only": (5, 7)}
+    internal_keys = {"nla_probe_cot", "probe_nla_cot", "cot_nla"}
+    for index, (key, label) in enumerate(policy_labels.items()):
+        policy = summary["policies"][key]
+        ax_policy.scatter(
+            policy["cost"],
+            policy["residual_harm"],
+            s=45,
+            color=channel_colors[index % len(channel_colors)],
+            zorder=3,
+        )
+        if key not in internal_keys:
+            ax_policy.annotate(
+                label,
+                (policy["cost"], policy["residual_harm"]),
+                xytext=label_offsets[key],
+                textcoords="offset points",
+                fontsize=6.9,
+                arrowprops={"arrowstyle": "-", "color": "#98A2B3", "lw": 0.55},
+            )
+    ax_policy.annotate(
+        "3 internal-priority routes",
+        (52.2, 18.0),
+        xytext=(42.2, 18.75),
+        textcoords="data",
+        fontsize=6.9,
+        arrowprops={"arrowstyle": "-", "color": "#98A2B3", "lw": 0.55},
+    )
+    total_harm = max(float(item["EPH"]) for item in summary["primary"].values())
+    lp_residual = total_harm * (1.0 - float(summary["lp"]["WH"]))
+    ax_policy.scatter(
+        summary["lp"]["cost"],
+        lp_residual,
+        s=95,
+        marker="*",
+        color=COLORS["red"],
+        zorder=4,
+    )
+    ax_policy.annotate(
+        "post-hoc LP upper bound",
+        (summary["lp"]["cost"], lp_residual),
+        xytext=(5, 6),
+        textcoords="offset points",
+        fontsize=6.9,
+    )
+    ax_policy.set_xlabel("Assumed monitoring cost")
+    ax_policy.set_ylabel("Residual harm")
+    ax_policy.set_xlim(21, 57)
+    ax_policy.set_ylim(8, 19.4)
+    ax_policy.set_title("Safety-cost trade-off by routing policy", loc="left", fontweight="bold")
+    ax_policy.grid(color="#E3E8EF", linewidth=0.7)
+    save(fig, "dashboard_summary")
 
 
 def load_empirical() -> tuple[dict, list[dict]] | None:
@@ -344,6 +520,7 @@ def main() -> int:
     write_result_macros(summary, mock_mode=mock_mode)
     draw_channel_detection(summary)
     draw_policy_tradeoff(summary)
+    draw_dashboard_summary(summary, mock_mode=mock_mode)
     print("Wrote empirical figures and paper/generated_results.tex")
     return 0
 

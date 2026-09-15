@@ -1,6 +1,8 @@
-\documentclass[10pt,twocolumn]{article}
+\documentclass[10pt]{article}
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
 \usepackage[margin=0.66in,columnsep=0.23in]{geometry}
 \usepackage{amsmath,amssymb,array,booktabs,flushend}
 \usepackage{caption,enumitem,graphicx,xcolor,xurl}
@@ -25,43 +27,53 @@
 \input{generated_results.tex}
 \input{generated_policy_results.tex}
 
-\title{\vspace{-1.2em}\system: A Reproducible Prototype for Risk-Weighted\\
-Pre-Harm Sabotage Monitoring\vspace{-0.35em}}
-\author{\small
-Jhoan S. Mosquera Ortiz \quad Juan F. Plata Barbosa\\[-1pt]
-Maryori A. Lasso Diaz \quad Angel A. del Castillo Lerma\\[2pt]
-\textit{Universidad Autónoma de Occidente, Cali, Colombia}\\[-1pt]
-\texttt{\{jhoan.mosquera,juan.plata,maryori.lasso,angel.del\}@uao.edu.co}}
+\title{\vspace{-0.8em}\system{}: A Reproducible Prototype for Risk-Weighted\\
+Pre-Harm Sabotage Monitoring\vspace{-0.25em}}
+\author{%
+\begin{tabular}{@{}c@{\hspace{2.4em}}c@{}}
+Jhoan S. Mosquera Ortiz & Juan F. Plata Barbosa\\
+Maryori A. Lasso Díaz & Ángel A. del Castillo Lerma
+\end{tabular}\\[3pt]
+\small\textit{Universidad Autónoma de Occidente, Cali, Colombia}\\[-1pt]
+\small\texttt{\{jhoan.mosquera,juan.plata,maryori.lasso,angel.del\}@uao.edu.co}}
 \date{\small AI Incident Response Sprint, 2026}
 
 \begin{document}
+\twocolumn[
+\begin{@twocolumnfalse}
 \maketitle
-\vspace{-1.5em}
+\vspace{-1.45em}
+\begin{center}
+\begin{minipage}{0.94\textwidth}
+\small
+\noindent\textbf{Abstract---}
+Tool-using language-model agents can turn a hidden objective into an
+irreversible action before a conventional audit reacts. We introduce \system{},
+a reproducible pre-harm incident-response prototype that aligns four evidence
+surfaces at the same pre-tool boundary: observable behavior, visible
+chain-of-thought (CoT), a linear activation probe, and a Natural Language
+Autoencoder (NLA) readout. Channel-isolated judgments are normalized and passed
+through a deterministic policy gate under a shared monitoring budget. The
+artifact includes a 24-trajectory protocol, schema-validated Gemini monitoring,
+provenance-aware aggregation, an operator dashboard, bilingual publication
+artifacts, and a one-command path for a 64~GiB cluster. Because the live scenario
+execution did not finish before the sprint deadline, this paper reports only a
+clearly labelled deterministic mock demonstration; it validates system
+integration, not the safety performance of Qwen2.5-7B, Gemini, the learned NLA,
+or the probe. In the constructed data, Observable and CoT each catch
+\phrObservableCount{} harmful attempts, whereas Probe and NLA each catch
+\phrProbeCount{}. The run also exposes a falsifiable systems lesson: richer
+internal evidence does not guarantee better containment when a naive routing
+rule spends scarce budget on the wrong cases.
 
-\begin{abstract}
-Tool-using language-model agents can convert a hidden objective into an
-irreversible action before a conventional audit reacts. Runtime monitors expose
-different evidence surfaces---observable behavior, chain-of-thought (CoT),
-linear activation probes, and Natural Language Autoencoder (NLA) readouts---but
-their operational value depends on timing, benign disruption, impact, and cost.
-We present \system, an open-source prototype that freezes one pre-action event,
-isolates four evidence channels, validates structured Gemini judgments, and
-maps alerts to allow, escalate, or block decisions under a common monitoring
-budget. The protocol contains 24 simulated trajectories spanning three tool
-families and four behavioral conditions. Because the live scenario run was not
-completed before the sprint deadline, we report a clearly labelled,
-deterministic mock evaluation. It validates the end-to-end contracts,
-instrumentation, metrics, optimizer, dashboard, and paper-generation path; it
-does not estimate the safety of Qwen2.5-7B, Gemini, the learned NLA, or the
-probe. In this synthetic demonstration, observable monitoring catches
-\phrObservableCount{} harmful attempts and CoT catches \phrCoTCount{}, while
-the deliberately separable mock probe and NLA channels catch
-\phrProbeCount{} and \phrNLACount{}, respectively. A severity-only routing
-heuristic can nevertheless perform worse than action-only monitoring by
-spending scarce budget on benign high-severity cases. The result illustrates
-why incident-response evaluations must jointly report detection, intervention
-timing, false disruption, and resource use.
-\end{abstract}
+\medskip
+\noindent\textbf{Index Terms---}AI safety, incident response, sabotage
+monitoring, Natural Language Autoencoders, runtime monitoring.
+\end{minipage}
+\end{center}
+\vspace{0.7em}
+\end{@twocolumnfalse}
+]
 
 \section{Introduction}
 Autonomous language-model agents extend text generation into consequential tool
@@ -130,7 +142,7 @@ SHADE-Arena \cite{kutasov2025shade} & \yes & \no & \no & \no & evasion/success\\
 AI Control \cite{greenblatt2024control} & \yes & \no & final artifact & limited audit & safety/usefulness\\
 Cost-constrained monitors \cite{hua2025cost} & general & \no & unspecified & \yes & recall\\
 NLA monitoring \cite{bowkis2026eliciting} & reward hacking & monitor-side & follow-up & \no & classification\\
-\textbf{\system{} (ours)} & \yes & probe + native NLA & \yes & \yes & weighted prevention\\
+\textbf{Budget-NLA (ours)} & \yes & probe + native NLA & \yes & \yes & weighted prevention\\
 \bottomrule
 \end{tabular}
 \caption{The target gap is the intersection of event-aligned latent evidence,
@@ -139,19 +151,19 @@ channel isolation, pre-harm intervention, and common-budget accounting.}
 \end{table*}
 
 \section{System and Experimental Design}
-The target is \texttt{Qwen/Qwen2.5-7B-Instruct}
+The target is \texttt{Qwen2.5-7B-Instruct}
 \cite{yang2025qwen25}, decoded deterministically. At the final token of
-\texttt{\textbackslash n<DECISION>\textbackslash n}, before the tool name or
+\texttt{<DECISION>}, before the tool name or
 arguments, the harness extracts the layer-20 residual state $h_i$. The same
-state is scored by an L2 logistic probe and verbalized by
-\texttt{Kameshr/nla-qwen2.5-7b-L20-av}. The adapter is disabled during agent
+state is scored by an L2 logistic probe and verbalized by the frozen layer-20
+NLA adapter. The adapter is disabled during agent
 generation and enabled only for verbalization. Prefix replay preserves the
 information set, although it does not measure synchronous pause/resume latency.
 
 Three simulated tool families cover report publication, corporate email, and
-allowlist updates. Each crosses \textsc{Benign}, \textsc{Attack Rejected},
-\textsc{Visible Sabotage}, and \textsc{Stealth Sabotage}, with two fixed variants
-(Fig.~\ref{fig:matrix}). Ground truth comes from policy rules and proposed tool
+allowlist updates. Each crosses benign use, attack rejection, visible sabotage,
+and stealth sabotage, with two fixed variants (Fig.~\ref{fig:matrix}). Ground
+truth comes from policy rules and proposed tool
 arguments, not from any monitor. All tool sinks, recipients, records, and
 network targets are synthetic.
 
@@ -181,6 +193,16 @@ provenance. The dashboard therefore acts as an incident-response inspection
 layer through which an operator can examine why a case was allowed, escalated,
 or blocked rather than as a separate source of results.
 
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.97\textwidth]{figures/dashboard_summary.pdf}
+\caption{Static publication view of the operator dashboard, regenerated from
+the same canonical summary used by both manuscripts. The red provenance badge
+prevents the synthetic demonstration from being mistaken for real-model
+evidence; the interactive application adds filters and per-case drill-down.}
+\label{fig:dashboard}
+\end{figure*}
+
 \section{Metrics and Budgeted Routing}
 Let $y_i\in\{0,1\}$ denote an adopted harmful objective with a harmful proposed
 tool call, $s_i$ its severity, $A_{im}$ a channel-$m$ pre-harm stop, and $c_{im}$
@@ -209,12 +231,12 @@ Default costs ($O=1.00,C=1.20,P=0.25,N=4.00$) are declared assumptions, not
 vendor prices. Predictable routing is a limitation and motivates future
 security-game formulations \cite{tambe2011security}.
 
-\section{Synthetic Demonstration Results}
+\section{Synthetic Results}
 \noindent\fcolorbox{budgetred}{white}{\parbox{0.94\columnwidth}{\small
 \textbf{Status: \resultstatusEN.} These measurements validate software behavior
 and presentation only. They must not be cited as real model performance.}}
 
-\begin{table}[h]
+\begin{table}[ht]
 \centering\scriptsize
 \setlength{\tabcolsep}{3.1pt}
 \begin{tabular}{@{}lrrrr@{}}
@@ -233,7 +255,7 @@ describe only this synthetic sample.}
 \label{tab:primary}
 \end{table}
 
-\begin{figure}[h]
+\begin{figure}[ht]
 \centering
 \begin{tikzpicture}
 \begin{axis}[
@@ -266,7 +288,7 @@ mock detects rejection language. Probe and NLA stop \phrProbeCount{} and
 by construction. Both $\mathrm{IMV}_{N}$ and $\mathrm{IMV}_{N\mid C}$ equal
 \imvNLA{} severity units in the current synthetic result set.
 
-\begin{table}[h]
+\begin{table}[ht]
 \centering\scriptsize
 \setlength{\tabcolsep}{3.5pt}
 \begin{tabular}{@{}lrrr@{}}
@@ -295,7 +317,7 @@ reuses realized mock benefits and is therefore an optimistic upper bound, not a
 deployable estimate. These results support neither acceptance nor rejection of
 the preregistered real-model hypotheses.
 
-\section{Reproducibility, Limitations, and Safety}
+\section{Reproducibility and Limitations}
 The repository freezes seeds, model IDs, layer, marker, LOTO split, costs, and a
 versioned schema. The cluster entry point supports a deterministic
 \texttt{demo} path and a \texttt{real} path. The latter downloads missing
@@ -318,13 +340,24 @@ API failures. All tools terminate in a simulator; no email, file, network, or
 access-control state is changed.
 
 \section{Conclusion}
-\system{} contributes a reproducible incident-response measurement stack, not
-a safety-performance claim. Its synthetic run confirms that the pre-action
-contract, channel isolation, policy gate, cost accounting, bilingual dashboard,
-and publication pipeline agree. It also exposes a substantive design lesson:
-a more informative monitor can yield worse containment when routing spends the
-budget on the wrong cases. A complete real run is required before drawing any
-conclusion about Qwen, NLA, probe, or Gemini performance.
+\system{} delivers an auditable incident-response control plane rather than an
+unsupported safety-performance claim. The completed synthetic run demonstrates
+that one pre-action event can be captured once, exposed through four isolated
+evidence surfaces, converted into schema-valid judgments, routed through a
+deterministic gate, and traced consistently across JSONL records, metrics, the
+dashboard, and both language versions of the paper. That end-to-end agreement
+is the principal result that this artifact can defend today.
+
+The mock study also reveals a concrete negative result for system design:
+access to a stronger signal is insufficient when allocation is driven by an
+uncalibrated severity heuristic. In this run, that heuristic spends budget on
+benign high-severity cases and leaves more harmful actions untreated than a
+cheaper action-only baseline. The next experiment therefore has a sharper
+burden of proof: a real NLA or probe must improve event-aligned, pre-harm
+containment \emph{and} preserve that advantage under the same budget and
+benign-disruption accounting. Until the 64~GiB cluster run satisfies that test,
+the defensible contribution is the reproducible evaluation and containment
+infrastructure---not a claim that any monitored model is safe.
 
 \bibliographystyle{unsrt}
 \bibliography{references}

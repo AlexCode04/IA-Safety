@@ -122,7 +122,13 @@ Upload the complete `paper/` folder. Choose either `main_en.tex` or
 - `generated_policy_results.tex`;
 - `references.bib`;
 - `figures/system_pipeline.pdf`;
-- `figures/experimental_matrix.pdf`.
+- `figures/experimental_matrix.pdf`;
+- `figures/dashboard_summary.pdf`.
+
+Both entry points use Latin Modern vector fonts and place the abstract/resumen
+across the full text width before the two-column body. Keep the complete author
+block unchanged between languages so every contributor is rendered with the
+same typographic hierarchy.
 
 ## Local compilation
 

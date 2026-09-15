@@ -5,11 +5,13 @@ on:
   push:
     paths:
       - "paper/**"
+      - "scripts/generate_paper_figures.py"
       - "scripts/generate_policy_macros.py"
       - ".github/workflows/build-paper.yml"
   pull_request:
     paths:
       - "paper/**"
+      - "scripts/generate_paper_figures.py"
       - "scripts/generate_policy_macros.py"
       - ".github/workflows/build-paper.yml"
 
@@ -33,7 +35,9 @@ jobs:
             texlive-latex-extra \
             texlive-fonts-recommended \
             texlive-pictures \
-            texlive-bibtex-extra
+            texlive-bibtex-extra \
+            lmodern \
+            poppler-utils
 
       - name: Compile English paper
         working-directory: paper
@@ -42,6 +46,16 @@ jobs:
       - name: Compile Spanish paper
         working-directory: paper
         run: latexmk -pdf -interaction=nonstopmode -halt-on-error main_es.tex
+
+      - name: Reject rasterized Type 3 fonts
+        working-directory: paper
+        run: |
+          for doc in main_en main_es; do
+            if pdffonts "$doc.pdf" | grep -q "Type 3"; then
+              echo "Raster Type 3 fonts found in $doc.pdf"
+              exit 1
+            fi
+          done
 
       - name: Collect PDFs
         run: |

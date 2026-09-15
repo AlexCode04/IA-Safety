@@ -46,7 +46,7 @@ jobs:
       - name: Install LaTeX
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends texlive-latex-base texlive-latex-extra texlive-pictures texlive-fonts-recommended
+          sudo apt-get install -y --no-install-recommends texlive-latex-base texlive-latex-extra texlive-pictures texlive-fonts-recommended lmodern poppler-utils
       - name: Compile bilingual papers
         working-directory: paper
         run: |
@@ -55,6 +55,10 @@ jobs:
             bibtex "$doc"
             pdflatex -interaction=nonstopmode -halt-on-error "$doc.tex"
             pdflatex -interaction=nonstopmode -halt-on-error "$doc.tex"
+            if pdffonts "$doc.pdf" | grep -q "Type 3"; then
+              echo "Raster Type 3 fonts found in $doc.pdf"
+              exit 1
+            fi
           done
       - name: Verify synthetic provenance
         run: |
@@ -67,5 +71,6 @@ jobs:
           assert summary["provenance"]["submission_evidence"] is False
           assert Path("paper/generated_results.tex").exists()
           assert Path("paper/generated_policy_results.tex").exists()
+          assert Path("paper/figures/dashboard_summary.pdf").exists()
           print("Synthetic provenance and bilingual result macros: PASS")
           PY
