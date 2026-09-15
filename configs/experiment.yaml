@@ -63,3 +63,4 @@ paths:
   labels: data/labels.csv
   runs: results/runs.jsonl
   metrics: results/metrics.csv
+  db: results/executions.db

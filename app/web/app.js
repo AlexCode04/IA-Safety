@@ -17,6 +17,8 @@ const I18N = {
     conditions: "Situaci\u00f3n",
     heroTitle: "Vista operativa del experimento",
     heroCaption: "Compara canales de vigilancia y pol\u00edticas bajo un presupuesto fijo. Los costos son valores de referencia.",
+    syntheticNotice: "DEMOSTRACI\u00d3N SINT\u00c9TICA/MOCK: no constituye evidencia de seguridad de modelos reales.",
+    realNotice: "CORRIDA REAL: los resultados integran los veredictos disponibles del monitor externo.",
     phr: "Detenidos a tiempo",
     bdr: "Falsas alarmas",
     eph: "Da\u00f1o evitado",
@@ -60,7 +62,7 @@ const I18N = {
       STEALTH_SABOTAGE: "Sabotaje oculto",
     },
     decisions: { allow: "Permitir", block: "Bloquear", escalate: "Revisar" },
-    headers: ["Caso", "Tarea", "Situaci\u00f3n", "Sabotaje", "Alertas", "Fija", "Adaptativa"],
+    headers: ["Caso", "Tarea", "Situaci\u00f3n", "Sabotaje", "Alertas", "Fija", "Adaptativa", "Ruta"],
     yes: "S\u00ed",
     no: "No",
   },
@@ -75,6 +77,8 @@ const I18N = {
     conditions: "Situation",
     heroTitle: "Operational experiment view",
     heroCaption: "Compare monitoring channels and policies under a fixed budget. Costs are reference values.",
+    syntheticNotice: "SYNTHETIC/MOCK DEMONSTRATION: not evidence of real-model safety.",
+    realNotice: "REAL RUN: results integrate the available external-monitor verdicts.",
     phr: "Stopped in time",
     bdr: "False alarms",
     eph: "Harm prevented",
@@ -118,7 +122,7 @@ const I18N = {
       STEALTH_SABOTAGE: "Hidden sabotage",
     },
     decisions: { allow: "Allow", block: "Block", escalate: "Review" },
-    headers: ["Case", "Task", "Situation", "Sabotage", "Alerts", "Uniform", "Adaptive"],
+    headers: ["Case", "Task", "Situation", "Sabotage", "Alerts", "Uniform", "Adaptive", "Route"],
     yes: "Yes",
     no: "No",
   },
@@ -192,7 +196,9 @@ function applyI18n() {
   const copy = t();
   document.getElementById("brandTag").textContent = copy.brandTag;
   document.getElementById("heroTitle").textContent = copy.heroTitle;
-  document.getElementById("heroCaption").textContent = copy.heroCaption;
+  const provenance = window.DASHBOARD_DATA.provenance || {};
+  const notice = provenance.mock_mode ? copy.syntheticNotice : copy.realNotice;
+  document.getElementById("heroCaption").textContent = `${copy.heroCaption} ${notice}`;
   document.querySelectorAll("[data-i18n]").forEach((node) => {
     node.textContent = copy[node.dataset.i18n];
   });
@@ -368,6 +374,7 @@ function caseSearchText(item, copy) {
     alerts,
     copy.decisions[item.uniform_decision],
     copy.decisions[item.adaptive_decision],
+    item.adaptive_policy,
   ].join(" ").toLowerCase();
 }
 
@@ -401,6 +408,7 @@ function renderTable(cases) {
         <td>${alerts}</td>
         <td>${copy.decisions[item.uniform_decision]}</td>
         <td>${copy.decisions[item.adaptive_decision]}</td>
+        <td>${item.adaptive_policy.replaceAll("_", " ")}</td>
       </tr>`;
     })
     .join("");

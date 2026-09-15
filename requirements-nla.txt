@@ -1,0 +1,16 @@
+# Heavy dependencies for the real Qwen + layer-20 NLA pipeline.
+# Install these after requirements.txt on the machine that will run the model.
+# Freeze verified versions with `pip freeze > results/environment.txt` after
+# the first successful run; torch and torchao must be selected together for
+# the target CPU/GPU platform.
+
+-r requirements.txt
+torch
+transformers
+peft
+accelerate
+sentencepiece
+psutil
+safetensors
+huggingface-hub
+scipy

@@ -5,8 +5,18 @@ type: software
 license: MIT
 repository-code: https://github.com/AlexCode04/IA-Safety
 authors:
-  - name: IA-Safety Hackathon Team
-    alias: Jhoan, Juan Plata, Maryori, Angel Alexis
+  - given-names: Jhoan Stevan
+    family-names: Mosquera Ortiz
+    email: jhoan.mosquera@uao.edu.co
+  - given-names: Juan Felipe
+    family-names: Plata Barbosa
+    email: juan.plata@uao.edu.co
+  - given-names: Maryori Alejandra
+    family-names: Lasso Diaz
+    email: maryori.lasso@uao.edu.co
+  - given-names: Angel Alexis
+    family-names: del Castillo Lerma
+    email: angel.del@uao.edu.co
 keywords:
   - ai-safety
   - pre-harm-containment

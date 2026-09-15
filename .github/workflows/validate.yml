@@ -1,0 +1,78 @@
+name: validate
+
+on:
+  pull_request:
+  push:
+    branches:
+      - integration/bilingual-mock-delivery
+
+jobs:
+  tests-and-demo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt -r requirements-paper.txt
+      - name: Tests
+        run: python -m pytest -q
+      - name: Deterministic demonstration
+        run: |
+          python scripts/run_experiment.py --reset-output
+          python scripts/build_results.py
+          python scripts/generate_paper_figures.py --allow-mock
+          python scripts/generate_policy_macros.py
+          python scripts/generate_dashboard_preview.py
+      - name: Verify generated paper macros are synchronized
+        run: |
+          git diff --exit-code -- \
+            paper/generated_results.tex \
+            paper/generated_policy_results.tex \
+            app/web/preview.html
+      - name: Dashboard schema and JavaScript smoke test
+        run: |
+          node --check app/web/app.js
+          python - <<'PY'
+          from streamlit.testing.v1 import AppTest
+          app = AppTest.from_file("app/dashboard.py")
+          app.run(timeout=30)
+          assert not app.exception
+          print("Dashboard integration: PASS")
+          PY
+      - name: Install LaTeX
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends texlive-latex-base texlive-latex-extra texlive-pictures texlive-fonts-recommended lmodern poppler-utils
+      - name: Compile bilingual papers
+        working-directory: paper
+        run: |
+          for doc in main_en main_es; do
+            pdflatex -interaction=nonstopmode -halt-on-error "$doc.tex"
+            bibtex "$doc"
+            pdflatex -interaction=nonstopmode -halt-on-error "$doc.tex"
+            pdflatex -interaction=nonstopmode -halt-on-error "$doc.tex"
+            if pdffonts "$doc.pdf" | grep -q "Type 3"; then
+              echo "Raster Type 3 fonts found in $doc.pdf"
+              exit 1
+            fi
+          done
+      - name: Verify synthetic provenance
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          summary = json.loads(Path("results/summary.json").read_text())
+          assert summary["runs"] == 24
+          assert summary["provenance"]["mock_mode"] is True
+          assert summary["provenance"]["submission_evidence"] is False
+          assert Path("paper/generated_results.tex").exists()
+          assert Path("paper/generated_policy_results.tex").exists()
+          assert Path("paper/figures/dashboard_summary.pdf").exists()
+          print("Synthetic provenance and bilingual result macros: PASS")
+          PY

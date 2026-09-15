@@ -33,6 +33,13 @@ copy .env.example .env
 
 Mock mode is the default. No API key is required for the baseline.
 
+For the real Qwen + layer-20 NLA pipeline, install the platform-specific
+dependencies on the machine with sufficient RAM:
+
+```bash
+pip install -r requirements-nla.txt
+```
+
 ### Live Gemini monitor smoke test
 
 The Gemini monitor keeps OBSERVABLE, COT, NLA and HYBRID inputs isolated and
@@ -50,23 +57,68 @@ committed.
 ## Single entry point
 
 ```bash
+# 1) base: generan runs.jsonl, metrics.csv y summary.json (mock por defecto)
 python scripts/run_experiment.py --reset-output
-python scripts/train_probe.py
 python scripts/build_results.py
+
+# 2) probe (fill probe_score en el contrato de senales)
+python scripts/train_probe.py          # persiste probe.pkl, probe_scores.json y activaciones
+python scripts/export_sqlite.py        # vierte runs.jsonl a results/executions.db (SQLite)
+
+# 3) NLA real requerida por el pipeline: solo con maquina >= 18GB
+python -u scripts/smoke_nla.py         # monitor_cases.json con corte <DECISION> (fusiona probe_score)
 pytest
+streamlit run app/dashboard.py         # 4 pestanas: escenarios, deteccion, presupuesto, trade-off
+```
+
+`train_probe.py` entrena el probe logreg L20 con leave-one-template-out, persiste
+`results/probe.pkl`, `results/probe_scores.json` y `results/probe_activations.npz`, y rellena
+`probe_score` en un `results/monitor_cases.json` preexistente. `smoke_nla.py` lee
+`probe_scores.json` y deja el contrato completo para el monitor de Gemini
+El gate `decide_verdict` consume el veredicto estructurado de Gemini.
+
+### Integrated real-data flow
+
+Gemini is intentionally a post-run stage. Qwen, the activation hook, NLA and
+the probe finish first; Gemini then reads their frozen hand-off contract. This
+keeps API failures and retries outside the expensive activation loop.
+
+```bash
+# Full Qwen/NLA/probe run (requires the heavy dependencies and sufficient RAM)
+python scripts/run_experiment.py --real --reset-output
+
+# Export the 24 records to the shared monitor contract
+python scripts/export_monitor_cases.py
+
+# API preflight: only the first 3 cases x 4 isolated channels
+python scripts/run_gemini_monitor.py --limit 3 --overwrite
+
+# Full monitor evaluation: 24 cases x 4 channels = 96 calls
+python scripts/run_gemini_monitor.py --overwrite
+
+python scripts/build_results.py
 streamlit run app/dashboard.py
 ```
 
-To keep the mock agent/NLA but replace the heuristic judges with isolated live
-Gemini calls, use:
+## Paper and publication figures
+
+The Overleaf-ready paper is bilingual: `paper/main_en.tex` is the English
+version and `paper/main_es.tex` is the Spanish version. Both share
+`paper/generated_results.tex`, `paper/references.bib`, and the same figures. Generate the two methodology figures at any time with:
 
 ```bash
-python scripts/run_experiment.py --reset-output --live-monitor
+pip install -r requirements-paper.txt
+python scripts/generate_paper_figures.py
 ```
 
-The live option makes three stateless Gemini calls per trajectory: OBSERVABLE,
-COT and NLA. It never exposes the future tool name or arguments to the
-pre-action monitor.
+After a frozen non-mock run, the same command generates the empirical plots and
+LaTeX result macros. Mock artifacts require the explicit `--allow-mock` flag and are labelled as a
+synthetic demonstration. Real runs require complete Gemini provenance. See
+`paper/README.md` before submission.
+
+`run_gemini_monitor.py` resumes completed scenario/channel/model tuples by
+default. Pass `--overwrite` only when starting a new result set. The real API
+key belongs only in local `.env` as `GEMINI_API_KEY`; never add it to Git.
 
 ## Result schema
 

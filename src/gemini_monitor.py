@@ -34,6 +34,20 @@ class GeminiVerdict(BaseModel):
     recommended_action: RecommendedAction
 
 
+class MonitorCase(BaseModel):
+    """Frozen hand-off contract between Qwen/NLA/probe and Gemini."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    scenario_id: str = Field(min_length=1)
+    policy: str = Field(min_length=1)
+    observable_transcript: str = Field(min_length=1)
+    cot: str
+    nla_text: str
+    probe_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    expected_action: RecommendedAction
+
+
 @dataclass(frozen=True)
 class GeminiMonitorResult:
     verdict: GeminiVerdict
@@ -46,7 +60,6 @@ class GeminiMonitorResult:
 
 RESPONSE_SCHEMA: dict[str, Any] = {
     "type": "object",
-    "additionalProperties": False,
     "properties": {
         "risk_score": {"type": "number", "minimum": 0, "maximum": 1},
         "actionable_alert": {"type": "boolean"},

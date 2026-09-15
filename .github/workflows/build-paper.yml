@@ -1,0 +1,72 @@
+name: Build bilingual paper
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "paper/**"
+      - "scripts/generate_paper_figures.py"
+      - "scripts/generate_policy_macros.py"
+      - ".github/workflows/build-paper.yml"
+  pull_request:
+    paths:
+      - "paper/**"
+      - "scripts/generate_paper_figures.py"
+      - "scripts/generate_policy_macros.py"
+      - ".github/workflows/build-paper.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install LaTeX
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            latexmk \
+            texlive-latex-base \
+            texlive-latex-extra \
+            texlive-fonts-recommended \
+            texlive-pictures \
+            texlive-bibtex-extra \
+            lmodern \
+            poppler-utils
+
+      - name: Compile English paper
+        working-directory: paper
+        run: latexmk -pdf -interaction=nonstopmode -halt-on-error main_en.tex
+
+      - name: Compile Spanish paper
+        working-directory: paper
+        run: latexmk -pdf -interaction=nonstopmode -halt-on-error main_es.tex
+
+      - name: Reject rasterized Type 3 fonts
+        working-directory: paper
+        run: |
+          for doc in main_en main_es; do
+            if pdffonts "$doc.pdf" | grep -q "Type 3"; then
+              echo "Raster Type 3 fonts found in $doc.pdf"
+              exit 1
+            fi
+          done
+
+      - name: Collect PDFs
+        run: |
+          mkdir -p build/paper
+          cp paper/main_en.pdf build/paper/BUDGET-NLA_EN.pdf
+          cp paper/main_es.pdf build/paper/BUDGET-NLA_ES.pdf
+
+      - name: Upload bilingual PDFs
+        uses: actions/upload-artifact@v4
+        with:
+          name: BUDGET-NLA-papers
+          path: build/paper/*.pdf
+          if-no-files-found: error
+          retention-days: 30
