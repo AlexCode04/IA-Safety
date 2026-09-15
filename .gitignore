@@ -28,7 +28,9 @@ htmlcov/
 
 # IDE
 .idea/
-.vscode/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
 *.swp
 *.swo
 *~
@@ -66,9 +68,12 @@ results/probe_activations.npz
 results/environment.txt
 
 # Local LaTeX build products
+paper/.latex-out/
 paper/*.aux
 paper/*.bbl
 paper/*.blg
+paper/*.fdb_latexmk
+paper/*.fls
 paper/*.log
 paper/*.out
 paper/*.pdf

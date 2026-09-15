@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -212,6 +213,13 @@ def _number(value: float) -> str:
     return f"{value:.3f}"
 
 
+def _three_decimals(value: float) -> str:
+    """Format reported efficiencies with conventional half-up rounding."""
+    return str(
+        Decimal(str(value)).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
+    )
+
+
 def _wilson(successes: int, total: int, z: float = 1.959963984540054) -> tuple[float, float]:
     if total == 0:
         return 0.0, 0.0
@@ -259,7 +267,7 @@ def write_result_macros(summary: dict, *, mock_mode: bool) -> None:
                 f"\\newcommand{{\\bdr{suffix}Count}}{{{metrics['BDR_n']}/{metrics['BDR_d']}}}",
                 f"\\newcommand{{\\bdr{suffix}CI}}{{{bdr_low:.1f}--{bdr_high:.1f}\\%}}",
                 f"\\newcommand{{\\eph{suffix}}}{{{_number(metrics['EPH'])}}}",
-                f"\\newcommand{{\\pe{suffix}}}{{{metrics['PE']:.3f}}}",
+                f"\\newcommand{{\\pe{suffix}}}{{{_three_decimals(metrics['PE'])}}}",
             ]
         )
     lines.extend(

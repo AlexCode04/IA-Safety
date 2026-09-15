@@ -27,8 +27,11 @@ POLICIES = {
 
 def _number(value: float) -> str:
     value = float(value)
-    if value.is_integer():
-        return f"{value:.1f}"
+    # Derived values such as 30 * (1 - 0.7) can be represented as
+    # 9.000000000000002. Treat values that are numerically integral as such so
+    # regenerating the checked-in macros is byte-for-byte stable.
+    if abs(value - round(value)) < 1e-9:
+        return f"{round(value):.1f}"
     return f"{value:.3f}".rstrip("0").rstrip(".")
 
 

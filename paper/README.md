@@ -56,6 +56,28 @@ The artifact contains:
 The same workflow also runs automatically when the paper changes, so a pull
 request shows whether both language versions still compile before merging.
 
+GitHub does not provide an Overleaf-style live split editor for `.tex` files.
+The workflow is the GitHub-native verification path: it compiles on GitHub and
+offers the resulting PDFs as a browser download. For an actual side-by-side
+source/PDF view in a browser, open the branch in Codespaces and use the VS Code
+setup below.
+
+## Side-by-side PDF preview in VS Code or Codespaces
+
+The repository recommends the **LaTeX Workshop** extension and includes shared
+workspace settings. After installing a TeX distribution (MiKTeX on Windows or
+TeX Live on Linux), open either `paper/main_en.tex` or `paper/main_es.tex` and
+save the file. LaTeX Workshop builds it automatically.
+
+Use **LaTeX Workshop: View LaTeX PDF** from the Command Palette to open the PDF
+in a VS Code tab, then move that tab to the right editor group for the same
+source/PDF arrangement shown by Overleaf. The preview supports SyncTeX: Ctrl+
+click in the PDF jumps to the source, and the extension's SyncTeX command jumps
+from source to PDF.
+
+The same workflow works in a GitHub Codespace, entirely in the browser, as long
+as the Codespace contains a TeX distribution.
+
 ## Browser-only dashboard preview
 
 The dashboard is a Streamlit application backed by the same canonical run and
